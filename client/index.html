@@ -30,6 +30,25 @@
           console.log("Respuesta del servidor (ack):", res);
         });
       });
+
+      socket.on("playerJoined", (data) => {
+        console.log(`Jugador ${data.username} se unió a la sala`);
+      });
+    </script>
+    <button id="joinRoomBtn">Unirse a Sala</button>
+
+    <script>
+      const joinBtn = document.getElementById("joinRoomBtn");
+      joinBtn.addEventListener("click", () => {
+        const gameId = prompt(
+          "Ingresa el ID de la sala a la que quieres unirte:"
+        );
+        const username = prompt("Tu nombre de jugador:");
+
+        socket.emit("joinRoom", { gameId, username }, (res) => {
+          console.log("Respuesta del servidor (joinRoom):", res);
+        });
+      });
     </script>
   </body>
 </html>

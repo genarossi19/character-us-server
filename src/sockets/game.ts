@@ -34,6 +34,27 @@ export function registerSocketHandlers(io: SocketIOServer) {
       console.log("Salas actuales:", rooms);
     });
 
+    socket.on("joinRoom", (payload, ack) => {
+      const { gameId, username } = payload;
+
+      if (!rooms[gameId]) {
+        if (ack) ack({ success: false, message: "Sala no existe" });
+        return;
+      }
+
+      socket.join(gameId);
+
+      // Opcional: agregar al jugador a la data de la sala
+      // rooms[gameId].players = rooms[gameId].players || [];
+      // rooms[gameId].players.push({ socketId: socket.id, username });
+
+      if (ack) ack({ success: true, message: `Unido a la sala ${gameId}` });
+
+      // 🔹 Broadcast a todos los demás de la sala
+      socket.to(gameId).emit("playerJoined", { username });
+      console.log(`Jugador ${username} se unió a la sala ${gameId}`);
+    });
+
     // Evento de desconexión
     socket.on("disconnect", () => {
       console.log(`Cliente desconectado: ${socket.id}`);
