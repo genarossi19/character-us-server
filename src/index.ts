@@ -1,10 +1,10 @@
-import express from 'express';
-import http from 'http';
-import { Server as SocketIOServer } from 'socket.io';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { registerSocketHandlers } from './sockets/game';
-
+import express from "express";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
+import cors from "cors";
+import dotenv from "dotenv";
+import { registerSocketHandlers } from "./sockets/game";
+import logger from "morgan";
 // Cargar variables de entorno desde .env
 dotenv.config();
 
@@ -12,10 +12,12 @@ dotenv.config();
 const app = express();
 
 // Configurar CORS para permitir conexiones desde el frontend
-app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 
 // Middleware para parsear JSON
 app.use(express.json());
@@ -27,16 +29,25 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: 'http://localhost:5173',
-    credentials: true
-  }
+    origin: "http://localhost:5173",
+    credentials: true,
+  },
 });
 
 // Registrar manejadores de eventos de Socket.IO
 registerSocketHandlers(io);
 
+import path from "path";
+import { cwd } from "process";
+
+app.get("/test", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "client", "index.html")); // ajusta la ruta según tu estructura
+});
+
 // Puerto desde .env o 3000 por defecto
 const PORT = process.env.PORT || 3000;
+
+app.use(logger("dev"));
 
 server.listen(PORT, () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);

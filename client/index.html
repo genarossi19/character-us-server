@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CharacterUs Test</title>
+  </head>
+  <body>
+    <h1>Prueba CharacterUs</h1>
+    <button id="createRoomBtn">Crear Sala con Payload</button>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+      const socket = io("http://localhost:3000");
+
+      socket.on("connect", () => {
+        console.log("Conectado al servidor con ID:", socket.id);
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Desconectado del servidor");
+      });
+
+      const btn = document.getElementById("createRoomBtn");
+      btn.addEventListener("click", () => {
+        // Payload que enviamos al servidor
+        const payload = { username: "Tester", character: "Aladdin", level: 3 };
+        console.log("Enviando createRoom con payload:", payload);
+
+        socket.emit("createRoom", payload, (res) => {
+          console.log("Respuesta del servidor (ack):", res);
+        });
+      });
+    </script>
+  </body>
+</html>
