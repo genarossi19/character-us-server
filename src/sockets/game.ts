@@ -1,72 +1,68 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { v4 as uuidv4 } from "uuid";
 
-// Estructura para almacenar las salas activas (puedes expandirla en src/data/)
-// Record<K, V> significa: Un objeto cuyas claves son de tipo K y cuyos valores son de tipo V
-const rooms: Record<string, { hostId: string }> = {};
-//ej "sala_1234": { hostId: "socket_A1B2" }
+interface RoomData {
+  hostId: string;
+  players?: { socketId: string; username: string }[];
+  internalId: string;
+  gamePin: number;
+}
+
+// Almacenamos las salas activas en memoria
+const rooms: Record<string, RoomData> = {};
 
 /**
- * Registra los eventos de Socket.IO para el juego CharacterUs.
- * @param io Instancia de Socket.IO Server
+ * Genera un PIN numérico único de 6 dígitos
  */
+function generateGamePin(): number {
+  let pin: number;
+  do {
+    pin = Math.floor(100000 + Math.random() * 900000); // 100000 - 999999
+  } while (Object.values(rooms).some((r) => r.gamePin === pin));
+  return pin;
+}
+
 export function registerSocketHandlers(io: SocketIOServer) {
-  // Evento de conexión de un cliente
   io.on("connection", (socket: Socket) => {
-    console.log(` Cliente conectado: ${socket.id}`);
-    // console.log("MOSTRANDO EL SOCKET COMPLETO ------->");
-    // console.log(socket);
+    console.log(`Cliente conectado: ${socket.id}`);
 
-    // Evento: crear una nueva sala de juego. .on indica que escuchamos un evento
-    //Recibe el payload del cliente que hiz emit
-    // el ack es un callback. Le manda el gameId para que el cliente ejecute la funcion que quiera (callback).
-    //Ejecuta la funcion (aunque del lado del cliente)
+    // Crear sala
     socket.on("createRoom", (payload, ack) => {
-      console.log("Payload recibido del cliente:", payload);
+      const internalId = uuidv4();
+      const gamePin = generateGamePin();
 
-      const gameId = uuidv4();
-      rooms[gameId] = { hostId: socket.id };
-      socket.join(gameId);
+      rooms[internalId] = {
+        hostId: socket.id,
+        internalId,
+        gamePin,
+        players: [{ socketId: socket.id, username: payload.username }],
+      };
 
-      ack({ gameId });
+      socket.join(internalId);
 
-      console.log(`Sala creada: ${gameId} por ${socket.id}`);
-      console.log("Salas actuales:", rooms);
+      if (ack) ack({ internalId, gamePin });
+
+      console.log(`Sala creada: internalId=${internalId}, gamePin=${gamePin}`);
     });
 
+    // Unirse a sala por gamePin
     socket.on("joinRoom", (payload, ack) => {
-      const { gameId, username } = payload;
+      const { gamePin, username } = payload;
 
-      if (!rooms[gameId]) {
+      const room = Object.values(rooms).find((r) => r.gamePin === gamePin);
+      if (!room) {
         if (ack) ack({ success: false, message: "Sala no existe" });
         return;
       }
 
-      socket.join(gameId);
+      socket.join(room.internalId);
+      room.players?.push({ socketId: socket.id, username });
 
-      // Opcional: agregar al jugador a la data de la sala
-      // rooms[gameId].players = rooms[gameId].players || [];
-      // rooms[gameId].players.push({ socketId: socket.id, username });
+      if (ack) ack({ success: true, message: `Unido a la sala ${gamePin}` });
 
-      if (ack) ack({ success: true, message: `Unido a la sala ${gameId}` });
-
-      // 🔹 Broadcast a todos los demás de la sala
-      socket.to(gameId).emit("playerJoined", { username });
-      console.log(`Jugador ${username} se unió a la sala ${gameId}`);
+      // Broadcast a los demás
+      socket.to(room.internalId).emit("playerJoined", { username });
+      console.log(`Jugador ${username} se unió a la sala gamePin=${gamePin}`);
     });
-
-    // Evento de desconexión
-    socket.on("disconnect", () => {
-      console.log(`Cliente desconectado: ${socket.id}`);
-      // Aquí puedes limpiar recursos o notificar a otros jugadores
-    });
-
-    // Puedes agregar más eventos aquí para lógica de juego multijugador
   });
 }
-
-// Comentarios:
-// - Este archivo centraliza la lógica de eventos de Socket.IO.
-// - La función registerSocketHandlers se importa en src/index.ts.
-// - rooms es un ejemplo simple de almacenamiento en memoria para salas.
-// - Expande la lógica para manejar uniones a salas, mensajes, etc.

@@ -8,46 +8,35 @@
     <h1>Prueba CharacterUs</h1>
     <button id="createRoomBtn">Crear Sala con Payload</button>
 
+    <button id="createRoomBtn">Crear Sala</button>
+    <button id="joinRoomBtn">Unirse a Sala</button>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
       const socket = io("http://localhost:3000");
 
-      socket.on("connect", () => {
-        console.log("Conectado al servidor con ID:", socket.id);
-      });
-
-      socket.on("disconnect", () => {
-        console.log("Desconectado del servidor");
-      });
-
-      const btn = document.getElementById("createRoomBtn");
-      btn.addEventListener("click", () => {
-        // Payload que enviamos al servidor
-        const payload = { username: "Tester", character: "Aladdin", level: 3 };
-        console.log("Enviando createRoom con payload:", payload);
-
-        socket.emit("createRoom", payload, (res) => {
-          console.log("Respuesta del servidor (ack):", res);
+      // Crear sala
+      document.getElementById("createRoomBtn").addEventListener("click", () => {
+        const username = prompt("Tu nombre de jugador:");
+        socket.emit("createRoom", { username }, (res) => {
+          console.log("Sala creada:", res); // { internalId, gamePin }
+          alert(`Sala creada con PIN: ${res.gamePin}`);
         });
       });
 
+      // Unirse a sala
+      document.getElementById("joinRoomBtn").addEventListener("click", () => {
+        const username = prompt("Tu nombre de jugador:");
+        const gamePin = Number(prompt("Ingresa el PIN de la sala:"));
+
+        socket.emit("joinRoom", { gamePin, username }, (res) => {
+          console.log("Respuesta joinRoom:", res);
+        });
+      });
+
+      // Broadcast
       socket.on("playerJoined", (data) => {
         console.log(`Jugador ${data.username} se unió a la sala`);
-      });
-    </script>
-    <button id="joinRoomBtn">Unirse a Sala</button>
-
-    <script>
-      const joinBtn = document.getElementById("joinRoomBtn");
-      joinBtn.addEventListener("click", () => {
-        const gameId = prompt(
-          "Ingresa el ID de la sala a la que quieres unirte:"
-        );
-        const username = prompt("Tu nombre de jugador:");
-
-        socket.emit("joinRoom", { gameId, username }, (res) => {
-          console.log("Respuesta del servidor (joinRoom):", res);
-        });
       });
     </script>
   </body>
