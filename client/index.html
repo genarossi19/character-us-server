@@ -6,37 +6,79 @@
   </head>
   <body>
     <h1>Prueba CharacterUs</h1>
-    <button id="createRoomBtn">Crear Sala con Payload</button>
 
+    <h2>Crear Sala</h2>
     <button id="createRoomBtn">Crear Sala</button>
-    <button id="joinRoomBtn">Unirse a Sala</button>
+    <p id="roomPin">PIN de la sala: -</p>
+
+    <h2>Unirse a Sala</h2>
+    <button id="joinRoomBtn">Unirse</button>
+
+    <h2>Jugadores en la sala:</h2>
+    <ul id="playersList"></ul>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
       const socket = io("http://localhost:3000");
+      const playersList = document.getElementById("playersList");
+      const roomPinElement = document.getElementById("roomPin");
+
+      function updatePlayersList(players, hostId, mySocketId) {
+        playersList.innerHTML = "";
+        players.forEach((p) => {
+          let displayName = p.username;
+          if (p.socketId === hostId) displayName += " (host)";
+          if (p.socketId === mySocketId) displayName += " (tu)";
+          const li = document.createElement("li");
+          li.innerText = displayName;
+          playersList.appendChild(li);
+        });
+      }
 
       // Crear sala
       document.getElementById("createRoomBtn").addEventListener("click", () => {
-        const username = prompt("Tu nombre de jugador:");
+        const username = prompt("Ingresa tu nombre de jugador:");
+        if (!username) return;
+
         socket.emit("createRoom", { username }, (res) => {
-          console.log("Sala creada:", res); // { internalId, gamePin }
-          alert(`Sala creada con PIN: ${res.gamePin}`);
+          roomPinElement.innerText = `PIN de la sala: ${res.gamePin}`;
+          console.log("Sala creada:", res);
+
+          // Lista inicial de jugadores
+          updatePlayersList(
+            [{ socketId: socket.id, username }],
+            socket.id, // hostId
+            socket.id // mySocketId
+          );
         });
       });
 
       // Unirse a sala
       document.getElementById("joinRoomBtn").addEventListener("click", () => {
-        const username = prompt("Tu nombre de jugador:");
-        const gamePin = Number(prompt("Ingresa el PIN de la sala:"));
+        const pin = Number(prompt("Ingresa el PIN de la sala:"));
+        if (!pin) return;
 
-        socket.emit("joinRoom", { gamePin, username }, (res) => {
-          console.log("Respuesta joinRoom:", res);
+        const username = prompt("Ahora ingresa tu nombre:");
+        if (!username) return;
+
+        socket.emit("joinRoom", { gamePin: pin, username }, (res) => {
+          if (!res.success) {
+            alert(`❌ Error: ${res.message}`);
+            return;
+          }
+          console.log(`✅ Te uniste a la sala con PIN ${pin}`);
         });
       });
 
-      // Broadcast
+      // Broadcast a los demás: mostrar en consola solo a otros jugadores
       socket.on("playerJoined", (data) => {
-        console.log(`Jugador ${data.username} se unió a la sala`);
+        console.log(`👤 ${data.username} se unió a la sala`);
+      });
+
+      // Lista de jugadores actualizada
+      socket.on("updatePlayers", (data) => {
+        // data = { players: [...], hostId: 'socketIdHost' }
+        updatePlayersList(data.players, data.hostId, socket.id);
       });
     </script>
   </body>

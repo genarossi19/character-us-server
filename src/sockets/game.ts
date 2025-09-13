@@ -46,6 +46,8 @@ export function registerSocketHandlers(io: SocketIOServer) {
     });
 
     // Unirse a sala por gamePin
+
+    // Unirse a sala por gamePin
     socket.on("joinRoom", (payload, ack) => {
       const { gamePin, username } = payload;
 
@@ -58,11 +60,17 @@ export function registerSocketHandlers(io: SocketIOServer) {
       socket.join(room.internalId);
       room.players?.push({ socketId: socket.id, username });
 
+      // Ack solo al jugador que se une
       if (ack) ack({ success: true, message: `Unido a la sala ${gamePin}` });
 
-      // Broadcast a los demás
+      // Broadcast a los demás de la sala
       socket.to(room.internalId).emit("playerJoined", { username });
-      console.log(`Jugador ${username} se unió a la sala gamePin=${gamePin}`);
+
+      // Actualizar lista de jugadores para todos
+      io.to(room.internalId).emit("updatePlayers", {
+        players: room.players,
+        hostId: room.hostId,
+      });
     });
   });
 }
