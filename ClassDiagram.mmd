@@ -1,0 +1,70 @@
+---
+config:
+  theme: dark
+---
+classDiagram
+    class User {
+        +id : UUID [PK]
+        +first_name : text
+        +last_name : text
+        +email : text
+        +password : text
+        +avatar : text
+        +registered_at : timestamp
+        +role : enum('player','admin')
+    }
+    class Category {
+        +id : UUID [PK]
+        +name : text
+        +description : text
+        +status : enum('active','inactive')
+    }
+    class Character {
+        +id : UUID [PK]
+        +name : text
+        +description : text
+        +image : text
+        +category_id : UUID [FK]
+    }
+    class Game {
+        +id : UUID [PK]
+        +pin_code : text
+        +name : text
+        +category_id : UUID [FK]
+        +character_id : UUID [FK]
+        +host_id : UUID [FK]
+        +type : enum('public','private')
+        +mode : enum('virtual','in_person')
+        +mode_variant : enum('classic','anonymous','special')
+        +impostors_know_each_other : boolean
+        +impostor_count : int
+        +max_players : int
+        +min_players : int
+        +status : enum('waiting','in_progress','finished')
+        +created_at : timestamp
+        +started_at : timestamp
+        +ended_at : timestamp
+        +total_rounds : int
+        +winner : enum('impostors','innocents')
+        +total_players : int
+        +total_impostors : int
+        +total_eliminated : int
+        +total_survivors : int
+        +duration_seconds : int
+    }
+    class PlayerGame {
+        +id : UUID [PK]
+        +user_id : UUID [FK]
+        +game_id : UUID [FK]
+        +role : enum('impostor','innocent')
+        +final_state : enum('alive','eliminated')
+        +elimination_order : int
+        +joined_at : timestamp
+        +left_at : timestamp
+    }
+    User "1" -- "*" PlayerGame
+    User "1" -- "*" Game        
+    Category "1" -- "*" Character
+    Category "1" -- "*" Game
+    Game "1" -- "*" PlayerGame
+    Game "*" -- "1" Character
