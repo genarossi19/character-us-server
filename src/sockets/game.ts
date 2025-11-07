@@ -8,17 +8,20 @@ interface RoomData {
   gamePin: number;
 }
 
-// Almacenamos las salas activas en memoria
+// Salas activas
 const rooms: Record<string, RoomData> = {};
 
+// Mapa de PINs para lookup rápido
+const pinMap: Record<number, string> = {}; // gamePin -> internalId
+
 /**
- * Genera un PIN numérico único de 6 dígitos
+ * genera un PIN numérico único de 6 digitos
  */
 function generateGamePin(): number {
   let pin: number;
   do {
     pin = Math.floor(100000 + Math.random() * 900000); // 100000 - 999999
-  } while (Object.values(rooms).some((r) => r.gamePin === pin));
+  } while (pinMap[pin]); // revisamos en el mapa
   return pin;
 }
 
@@ -38,39 +41,53 @@ export function registerSocketHandlers(io: SocketIOServer) {
         players: [{ socketId: socket.id, username: payload.username }],
       };
 
+      // Guardamos el PIN en el mapa
+      pinMap[gamePin] = internalId;
+
       socket.join(internalId);
 
       if (ack) ack({ internalId, gamePin });
 
       console.log(`Sala creada: internalId=${internalId}, gamePin=${gamePin}`);
+      console.log("Rooms:", rooms);
+      console.log("PIN map:", pinMap);
     });
-
-    // Unirse a sala por gamePin
 
     // Unirse a sala por gamePin
     socket.on("joinRoom", (payload, ack) => {
       const { gamePin, username } = payload;
 
-      const room = Object.values(rooms).find((r) => r.gamePin === gamePin);
-      if (!room) {
+      const internalId = pinMap[gamePin];
+      if (!internalId || !rooms[internalId]) {
         if (ack) ack({ success: false, message: "Sala no existe" });
         return;
       }
 
-      socket.join(room.internalId);
+      const room = rooms[internalId];
+
+      socket.join(internalId);
       room.players?.push({ socketId: socket.id, username });
 
       // Ack solo al jugador que se une
       if (ack) ack({ success: true, message: `Unido a la sala ${gamePin}` });
 
       // Broadcast a los demás de la sala
-      socket.to(room.internalId).emit("playerJoined", { username });
+      socket.to(internalId).emit("playerJoined", { username });
 
       // Actualizar lista de jugadores para todos
-      io.to(room.internalId).emit("updatePlayers", {
+      io.to(internalId).emit("updatePlayers", {
         players: room.players,
         hostId: room.hostId,
       });
+
+      console.log(`Jugador ${username} se unió a la sala gamePin=${gamePin}`);
+      console.log("Rooms:", rooms);
+      console.log("PIN map:", pinMap);
+    });
+
+    // Desconexión (simple)
+    socket.on("disconnect", () => {
+      console.log(`Cliente desconectado: ${socket.id}`);
     });
   });
 }
