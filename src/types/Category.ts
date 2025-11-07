@@ -5,4 +5,4 @@ export interface CategoryType {
   status: "active" | "inactive";
 }
 
-export type CategoryResponse = CategoryType;
+export type CategoryResponse = Omit<CategoryType, "status" | "description">;

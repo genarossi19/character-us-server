@@ -1,7 +1,7 @@
 import type { CategoryResponse } from "./Category";
 import type { CharacterResponse } from "./Character";
 import type { PlayerGameResponse } from "./PlayerGame";
-import type { UserResponse } from "./User";
+import type { UserGameResponse } from "./User";
 
 export interface GameType {
   id: string;
@@ -36,6 +36,6 @@ export type GameResponse = Omit<
 > & {
   category: CategoryResponse;
   character?: CharacterResponse | null;
-  host: UserResponse;
+  host: UserGameResponse;
   players: PlayerGameResponse[];
 };

@@ -2,6 +2,7 @@ export interface UserType {
   id: string;
   first_name: string;
   last_name: string;
+  username: string; // nuevo
   email: string;
   password: string;
   avatar?: string | null;
@@ -10,3 +11,8 @@ export interface UserType {
 }
 
 export type UserResponse = Omit<UserType, "password">;
+
+export type UserGameResponse = Omit<
+  UserType,
+  "password" | "registered_at" | "email" | "last_name" | "first_name"
+>;
