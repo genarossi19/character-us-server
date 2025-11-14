@@ -5,4 +5,8 @@ export interface CategoryType {
   status: "active" | "inactive";
 }
 
-export type CategoryResponse = Omit<CategoryType, "status" | "description">;
+// DTO
+export type CategoryDTO = {
+  id: string;
+  name: string;
+};
