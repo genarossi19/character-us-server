@@ -3,8 +3,11 @@ import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
-import { registerSocketHandlers } from "./sockets/game";
+import { registerSocketHandlers } from "./sockets/game.ts";
 import logger from "morgan";
+import path from "path";
+import categoryRoute from "../src/api/services/category/category.route.ts";
+import adminRouter from "./admin/admin.router.ts";
 // Cargar variables de entorno desde .env
 dotenv.config();
 
@@ -37,15 +40,15 @@ const io = new SocketIOServer(server, {
 // Registrar manejadores de eventos de Socket.IO
 registerSocketHandlers(io);
 
-import path from "path";
-import { cwd } from "process";
-
 app.get("/test", (req, res) => {
   res.sendFile(path.join(process.cwd(), "client", "index.html")); // ajusta la ruta según tu estructura
 });
 
 // Puerto desde .env o 3000 por defecto
 const PORT = process.env.PORT || 3000;
+app.use("/admin", adminRouter);
+
+app.use("/api/category", categoryRoute);
 
 app.use(logger("dev"));
 
