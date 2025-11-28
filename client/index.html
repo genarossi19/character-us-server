@@ -7,53 +7,71 @@
   <body>
     <h1>Prueba CharacterUs</h1>
 
+    <!-- Crear Sala -->
     <h2>Crear Sala</h2>
     <button id="createRoomBtn">Crear Sala</button>
     <p id="roomPin">PIN de la sala: -</p>
 
+    <!-- Unirse a Sala -->
     <h2>Unirse a Sala</h2>
     <button id="joinRoomBtn">Unirse</button>
 
+    <!-- Iniciar Juego -->
+    <h2>Iniciar Juego (solo host)</h2>
+    <button id="startGameBtn">Iniciar Juego</button>
+
+    <!-- Lista de jugadores -->
     <h2>Jugadores en la sala:</h2>
     <ul id="playersList"></ul>
 
+    <!-- Socket.IO -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
     <script>
       const socket = io("http://localhost:3000");
+
       const playersList = document.getElementById("playersList");
       const roomPinElement = document.getElementById("roomPin");
+      const startGameBtn = document.getElementById("startGameBtn");
 
-      function updatePlayersList(players, hostId, mySocketId) {
+      let currentRoomPin = null;
+      let mySocketId = null;
+
+      socket.on("connect", () => {
+        mySocketId = socket.id;
+        console.log("Conectado con socket ID:", mySocketId);
+      });
+
+      /** Función para actualizar la lista de jugadores */
+      function updatePlayersList(players, hostId) {
         playersList.innerHTML = "";
         players.forEach((p) => {
           let displayName = p.username;
           if (p.socketId === hostId) displayName += " (host)";
-          if (p.socketId === mySocketId) displayName += " (tu)";
+          if (p.socketId === mySocketId) displayName += " (tú)";
           const li = document.createElement("li");
           li.innerText = displayName;
           playersList.appendChild(li);
         });
       }
 
-      // Crear sala
+      /** Crear sala */
       document.getElementById("createRoomBtn").addEventListener("click", () => {
         const username = prompt("Ingresa tu nombre de jugador:");
-        if (!username) return;
+        const categoryId = prompt("Ingresa la categoría (id) para la partida:");
+        if (!username || !categoryId) return;
 
-        socket.emit("createRoom", { username }, (res) => {
+        socket.emit("createRoom", { username, categoryId }, (res) => {
+          currentRoomPin = res.gamePin;
           roomPinElement.innerText = `PIN de la sala: ${res.gamePin}`;
           console.log("Sala creada:", res);
 
           // Lista inicial de jugadores
-          updatePlayersList(
-            [{ socketId: socket.id, username }],
-            socket.id, // hostId
-            socket.id // mySocketId
-          );
+          updatePlayersList([{ socketId: socket.id, username }], socket.id);
         });
       });
 
-      // Unirse a sala
+      /** Unirse a sala existente */
       document.getElementById("joinRoomBtn").addEventListener("click", () => {
         const pin = Number(prompt("Ingresa el PIN de la sala:"));
         if (!pin) return;
@@ -66,19 +84,48 @@
             alert(`❌ Error: ${res.message}`);
             return;
           }
+          currentRoomPin = pin;
           console.log(`✅ Te uniste a la sala con PIN ${pin}`);
         });
       });
 
-      // Broadcast a los demás: mostrar en consola solo a otros jugadores
+      /** Iniciar juego (solo host) */
+      startGameBtn.addEventListener("click", () => {
+        if (!currentRoomPin) return alert("Primero debes estar en una sala");
+        socket.emit("startGame", { gamePin: currentRoomPin }, (res) => {
+          if (!res.success) return alert(`❌ Error: ${res.message}`);
+          console.log("Juego iniciado!");
+        });
+      });
+
+      /** Escucha cuando un nuevo jugador se une */
       socket.on("playerJoined", (data) => {
         console.log(`👤 ${data.username} se unió a la sala`);
       });
 
-      // Lista de jugadores actualizada
+      /** Escucha la lista actualizada de jugadores */
       socket.on("updatePlayers", (data) => {
-        // data = { players: [...], hostId: 'socketIdHost' }
-        updatePlayersList(data.players, data.hostId, socket.id);
+        updatePlayersList(data.players, data.hostId);
+      });
+
+      /** Escucha cuando el juego empieza */
+      socket.on("gameStarted", (data) => {
+        console.log("🎮 Juego iniciado!");
+        console.log("Categoría de la partida:", data.categoryId);
+
+        data.players.forEach((p) => {
+          console.log(`Jugador: ${p.username}`);
+          console.log(`Impostor?: ${p.isImpostor}`);
+          if (!p.isImpostor) {
+            console.log("Personaje visible:", p.character); // objeto completo
+          } else {
+            console.log("Personaje invisible para impostor");
+          }
+        });
+
+        alert(
+          "El juego ha comenzado! Revisa la consola para ver los personajes y quién es el impostor."
+        );
       });
     </script>
   </body>

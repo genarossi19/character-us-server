@@ -3,11 +3,12 @@ import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
-import { registerSocketHandlers } from "./sockets/game.ts";
+import { registerSocketHandlers } from "./sockets/rooms.ts";
 import logger from "morgan";
 import path from "path";
 import categoryRoute from "../src/api/services/category/category.route.ts";
 import adminRouter from "./admin/admin.router.ts";
+import characterRoute from "./api/services/character/character.route.ts";
 // Cargar variables de entorno desde .env
 dotenv.config();
 
@@ -49,7 +50,7 @@ const PORT = process.env.PORT || 3000;
 app.use("/admin", adminRouter);
 
 app.use("/api/category", categoryRoute);
-
+app.use("/api/character", characterRoute);
 app.use(logger("dev"));
 
 server.listen(PORT, () => {

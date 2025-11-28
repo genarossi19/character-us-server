@@ -1,4 +1,4 @@
-import type { CategoryResponse } from "./Category";
+import type { CategoryDTO } from "./Category.ts";
 
 export interface CharacterType {
   id: string;
@@ -8,5 +8,5 @@ export interface CharacterType {
   category_id: string;
 }
 export type CharacterResponse = Omit<CharacterType, "category_id"> & {
-  category: CategoryResponse;
+  category: CategoryDTO;
 };

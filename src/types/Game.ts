@@ -1,7 +1,7 @@
-import type { CategoryResponse } from "./Category";
-import type { CharacterResponse } from "./Character";
-import type { PlayerGameResponse } from "./PlayerGame";
-import type { UserGameResponse } from "./User";
+import type { CategoryDTO } from "./Category.ts";
+import type { CharacterResponse } from "./Character.ts";
+import type { PlayerGameResponse } from "./PlayerGame.ts";
+import type { UserGameResponse } from "./User.ts";
 
 export interface GameType {
   id: string;
@@ -34,7 +34,7 @@ export type GameResponse = Omit<
   GameType,
   "category_id" | "character_id" | "host_id"
 > & {
-  category: CategoryResponse;
+  category: CategoryDTO;
   character?: CharacterResponse | null;
   host: UserGameResponse;
   players: PlayerGameResponse[];

@@ -1,0 +1,21 @@
+---
+config:
+  theme: dark
+---
+flowchart TD
+    subgraph HTTP [HTTP REST Endpoints]
+        A1[POST /users/register] -->|Crea usuario| DB[(Base de datos)]
+        A2[POST /users/login] -->|Devuelve JWT| User[Usuario]
+        A3[GET /games] -->|Lista partidas activas| User
+        A4[POST /games] -->|Crea nueva partida| DB
+        A5[GET /games/:id] -->|Obtiene info partida| User
+    end
+    subgraph WS [WebSocket Events]
+        B1["join_lobby"] --> Lobby[Actualiza lista de jugadores en lobby]
+        B2["choose_avatar"] --> Lobby[Notifica avatar seleccionado]
+        B3["start_game"] --> Players[Envia personaje a cada jugador según rol]
+        B4["chat_message"] --> Players[Todos reciben mensaje en tiempo real]
+        B5["vote_player"] --> Players[Actualiza votos en tiempo real]
+        B6["player_eliminated"] --> Players[Notifica quien fue eliminado]
+        B7["end_round"] --> Players[Notifica fin de ronda y resultado]
+    end
