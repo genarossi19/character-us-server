@@ -1,5 +1,3 @@
-import type { UserResponse } from "./User";
-
 export interface PlayerGameType {
   id: string;
   user_id: string;
@@ -11,6 +9,4 @@ export interface PlayerGameType {
   left_at?: string | null;
 }
 
-export type PlayerGameResponse = Omit<PlayerGameType, "user_id" | "game_id"> & {
-  user: UserResponse;
-};
+export type PlayerGameResponse = Omit<PlayerGameType, "user_id" | "game_id">;

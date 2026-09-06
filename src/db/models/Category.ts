@@ -1,6 +1,12 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../../../db/sequelize.ts";
-import type { CategoryType } from "../../../types/Category.ts";
+import sequelize from "../sequelize.ts";
+
+export interface CategoryType {
+  id: string;
+  name: string;
+  description?: string | null;
+  status: "active" | "inactive";
+}
 
 const Category = sequelize.define<
   Model<CategoryType, Omit<CategoryType, "id">>

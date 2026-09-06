@@ -1,7 +1,14 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../../../db/sequelize.ts";
-import Category from "../category/category.model.ts";
-import type { CharacterType } from "../../../types/Character.ts";
+import sequelize from "../sequelize.ts";
+import Category from "./Category.ts";
+
+export interface CharacterType {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  category_id: string;
+}
 
 const Character = sequelize.define<
   Model<CharacterType, Omit<CharacterType, "id">>
@@ -21,9 +28,10 @@ const Character = sequelize.define<
       type: DataTypes.TEXT,
       allowNull: true,
     },
-    image: {
+    imageUrl: {
       type: DataTypes.STRING,
       allowNull: true,
+      field: "image_url",
     },
     category_id: {
       type: DataTypes.UUID,
@@ -36,9 +44,7 @@ const Character = sequelize.define<
   }
 );
 
-// Relación: un Character pertenece a una Category
 Character.belongsTo(Category, { foreignKey: "category_id" });
-
 Category.hasMany(Character, { foreignKey: "category_id" });
 
 export default Character;

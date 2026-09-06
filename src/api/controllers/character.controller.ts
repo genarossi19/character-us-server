@@ -1,21 +1,11 @@
 import type { Request, Response } from "express";
-import Character from "../character/character.model.ts";
-import type { CharacterType } from "../../../types/Character.ts";
-import type ErrorResponse from "../../../types/Error.ts";
+import Character from "../../db/models/Character.ts";
+import { getRandomCharacterByCategory } from "../services/character/character.service.ts";
 
-import { getRandomCharacterByCategory } from "./character.service.ts";
-
-// Obtener todos los personajes
-export const getAllCharacters = async (
-  req: Request,
-  res: Response<CharacterType[] | ErrorResponse>
-) => {
+export const getAllCharacters = async (_req: Request, res: Response) => {
   try {
     const characters = await Character.findAll();
-    // Convertimos a objeto plano
-    const response: CharacterType[] = characters.map((c) =>
-      c.get({ plain: true })
-    );
+    const response = characters.map((c) => c.get({ plain: true }));
     res.json(response);
   } catch (error) {
     console.error(error);
@@ -23,17 +13,12 @@ export const getAllCharacters = async (
   }
 };
 
-// Obtener personaje por ID
-export const getCharacterById = async (
-  req: Request,
-  res: Response<CharacterType | ErrorResponse>
-) => {
+export const getCharacterById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const character = await Character.findByPk(id);
     if (!character)
       return res.status(404).json({ message: "Personaje no encontrado" });
-
     res.json(character.get({ plain: true }));
   } catch (error) {
     console.error(error);
@@ -41,19 +26,13 @@ export const getCharacterById = async (
   }
 };
 
-// Obtener personajes por category_id
-export const getCharactersByCategory = async (
-  req: Request,
-  res: Response<CharacterType[] | ErrorResponse>
-) => {
+export const getCharactersByCategory = async (req: Request, res: Response) => {
   const { categoryId } = req.params;
   try {
     const characters = await Character.findAll({
       where: { category_id: categoryId },
     });
-    const response: CharacterType[] = characters.map((c) =>
-      c.get({ plain: true })
-    );
+    const response = characters.map((c) => c.get({ plain: true }));
     res.json(response);
   } catch (error) {
     console.error(error);
@@ -63,20 +42,14 @@ export const getCharactersByCategory = async (
   }
 };
 
-export const getRandomCharacter = async (
-  req: Request,
-  res: Response<any | ErrorResponse>
-) => {
+export const getRandomCharacter = async (req: Request, res: Response) => {
   const { categoryId } = req.params;
-
   try {
     const character = await getRandomCharacterByCategory(categoryId);
-
     if (!character)
       return res
         .status(404)
         .json({ message: "No hay personajes para esta categoría" });
-
     res.json(character);
   } catch (error) {
     console.error(error);
@@ -84,22 +57,17 @@ export const getRandomCharacter = async (
   }
 };
 
-// Crear nuevo personaje
-export const createCharacter = async (
-  req: Request,
-  res: Response<CharacterType | ErrorResponse>
-) => {
-  const { name, description, image, category_id } = req.body;
+export const createCharacter = async (req: Request, res: Response) => {
+  const { name, description, imageUrl, category_id } = req.body;
   if (!name || !category_id)
     return res
       .status(400)
       .json({ message: "El nombre y category_id son obligatorios" });
-
   try {
     const character = await Character.create({
       name,
       description,
-      image,
+      imageUrl,
       category_id,
     });
     res.status(201).json(character.get({ plain: true }));
@@ -109,20 +77,14 @@ export const createCharacter = async (
   }
 };
 
-// Actualizar personaje
-export const updateCharacter = async (
-  req: Request,
-  res: Response<CharacterType | ErrorResponse>
-) => {
+export const updateCharacter = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, image, category_id } = req.body;
-
+  const { name, description, imageUrl, category_id } = req.body;
   try {
     const character = await Character.findByPk(id);
     if (!character)
       return res.status(404).json({ message: "Personaje no encontrado" });
-
-    await character.update({ name, description, image, category_id });
+    await character.update({ name, description, imageUrl, category_id });
     res.json(character.get({ plain: true }));
   } catch (error) {
     console.error(error);
@@ -130,18 +92,12 @@ export const updateCharacter = async (
   }
 };
 
-// Eliminar personaje
-export const deleteCharacter = async (
-  req: Request,
-  res: Response<null | ErrorResponse>
-) => {
+export const deleteCharacter = async (req: Request, res: Response) => {
   const { id } = req.params;
-
   try {
     const character = await Character.findByPk(id);
     if (!character)
       return res.status(404).json({ message: "Personaje no encontrado" });
-
     await character.destroy();
     res.status(204).send();
   } catch (error) {

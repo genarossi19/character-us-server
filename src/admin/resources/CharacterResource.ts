@@ -1,15 +1,14 @@
-// CharacterResource.ts
-import Character from "../../api/services/character/character.model.ts";
+import Character from "../../db/models/Character.ts";
 
 export const CharacterResource = {
   resource: Character,
   options: {
-    listProperties: ["id", "name", "description", "image", "category_id"],
-    editProperties: ["name", "description", "image", "category_id"],
+    listProperties: ["id", "name", "description", "imageUrl", "category_id"],
+    editProperties: ["name", "description", "imageUrl", "category_id"],
     filterProperties: ["name", "category_id"],
     properties: {
       category_id: {
-        reference: "category", // coincide con el resource registrado
+        reference: "category",
       },
     },
   },

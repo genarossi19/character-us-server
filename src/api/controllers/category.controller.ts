@@ -1,8 +1,7 @@
 import type { Request, Response } from "express";
-import Category from "./category.model.ts";
+import Category from "../../db/models/Category.ts";
 
-// GET: lista de categorías (solo id y name)
-export const getAllCategories = async (req: Request, res: Response) => {
+export const getAllCategories = async (_req: Request, res: Response) => {
   try {
     const categories = await Category.findAll({
       attributes: ["id", "name"],
@@ -14,15 +13,12 @@ export const getAllCategories = async (req: Request, res: Response) => {
   }
 };
 
-// GET: categoría por id (todo el objeto)
 export const getCategoryById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const category = await Category.findByPk(id);
-
     if (!category)
       return res.status(404).json({ message: "Categoría no encontrada" });
-
     res.json(category);
   } catch (error) {
     console.error(error);
@@ -30,24 +26,15 @@ export const getCategoryById = async (req: Request, res: Response) => {
   }
 };
 
-// POST: crear nueva categoría
-
 export const createCategory = async (req: Request, res: Response) => {
   try {
     const { name, description, status } = req.body;
-
     if (!name) {
       return res
         .status(400)
         .json({ message: "El campo 'name' es obligatorio" });
     }
-
-    const category = await Category.create({
-      name,
-      description,
-      status,
-    });
-
+    const category = await Category.create({ name, description, status });
     res.status(201).json(category);
   } catch (error) {
     console.error(error);
@@ -55,17 +42,13 @@ export const createCategory = async (req: Request, res: Response) => {
   }
 };
 
-// PUT: actualizar categoría existente
 export const updateCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, description, status } = req.body;
-
     const category = await Category.findByPk(id);
     if (!category)
       return res.status(404).json({ message: "Categoría no encontrada" });
-
-    // Actualizamos solo los campos permitidos
     await category.update({ name, description, status });
     res.json(category);
   } catch (error) {
@@ -74,14 +57,12 @@ export const updateCategory = async (req: Request, res: Response) => {
   }
 };
 
-// DELETE: eliminar categoría
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const category = await Category.findByPk(id);
     if (!category)
       return res.status(404).json({ message: "Categoría no encontrada" });
-
     await category.destroy();
     res.status(204).send();
   } catch (error) {

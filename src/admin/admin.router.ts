@@ -1,20 +1,18 @@
 import bcrypt from "bcryptjs";
 import AdminJSExpress from "@adminjs/express";
-import adminJs from "./admin.config.ts"; // tu instancia de AdminJS
-
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL!;
-const ADMIN_HASH = process.env.ADMIN_HASH!; // hash guardado en .env
+import adminJs from "../admin/admin.config.ts";
+import { env } from "../config/env.ts";
 
 const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
   adminJs,
   {
     authenticate: async (email, password) => {
-      if (email !== ADMIN_EMAIL) return null;
-      const ok = await bcrypt.compare(password, ADMIN_HASH);
-      return ok ? { email: ADMIN_EMAIL } : null;
+      if (email !== env.ADMIN_EMAIL) return null;
+      const ok = await bcrypt.compare(password, env.ADMIN_HASH);
+      return ok ? { email: env.ADMIN_EMAIL } : null;
     },
     cookieName: "adminjs",
-    cookiePassword: process.env.COOKIE_SECRET || "un-secreto-corto",
+    cookiePassword: env.COOKIE_SECRET,
   },
   null,
   { resave: false, saveUninitialized: true }

@@ -1,4 +1,4 @@
-import Category from "../../api/services/category/category.model.ts";
+import Category from "../../db/models/Category.ts";
 
 export const CategoryResource = {
   resource: Category,

@@ -2,62 +2,54 @@ import express from "express";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
-import dotenv from "dotenv";
-import { registerSocketHandlers } from "./sockets/rooms.ts";
 import logger from "morgan";
 import path from "path";
-import categoryRoute from "../src/api/services/category/category.route.ts";
-import adminRouter from "./admin/admin.router.ts";
-import characterRoute from "./api/services/character/character.route.ts";
-// Cargar variables de entorno desde .env
-dotenv.config();
 
-// Crear instancia de Express
+import { env } from "./config/env.ts";
+import { registerSocketHandlers } from "./sockets/index.ts";
+import adminRouter from "./admin/admin.router.ts";
+import categoryRoute from "./api/routes/category.routes.ts";
+import characterRoute from "./api/routes/character.routes.ts";
+import authRoute from "./api/routes/auth.routes.ts";
+import statsRoute from "./api/routes/stats.routes.ts";
+
 const app = express();
 
-// Configurar CORS para permitir conexiones desde el frontend
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: env.CORS_ORIGIN,
     credentials: true,
   })
 );
 
-// Middleware para parsear JSON
 app.use(express.json());
 
-// Importar rutas (expandible para endpoints REST)
-// app.use('/api', require('./routes/api'));
+app.use(logger("dev"));
 
-// Crear servidor HTTP y Socket.IO
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: env.CORS_ORIGIN,
     credentials: true,
+    methods: ["GET", "POST"],
   },
+  transports: ["websocket"],
+  pingTimeout: 60_000,
+  pingInterval: 25_000,
 });
 
-// Registrar manejadores de eventos de Socket.IO
 registerSocketHandlers(io);
 
-app.get("/test", (req, res) => {
-  res.sendFile(path.join(process.cwd(), "client", "index.html")); // ajusta la ruta según tu estructura
+app.get("/test", (_req, res) => {
+  res.sendFile(path.join(process.cwd(), "client", "index.html"));
 });
 
-// Puerto desde .env o 3000 por defecto
-const PORT = process.env.PORT || 3000;
 app.use("/admin", adminRouter);
-
+app.use("/api/auth", authRoute);
 app.use("/api/category", categoryRoute);
 app.use("/api/character", characterRoute);
-app.use(logger("dev"));
+app.use("/api/stats", statsRoute);
 
-server.listen(PORT, () => {
-  console.log(`Servidor escuchando en http://localhost:${PORT}`);
+server.listen(env.PORT, () => {
+  console.log(`Servidor escuchando en http://localhost:${env.PORT}`);
 });
-
-// Comentarios:
-// - Este archivo inicializa el servidor Express y Socket.IO.
-// - La función registerSocketHandlers centraliza la lógica de eventos de juego.
-// - Puedes agregar rutas REST en src/routes/ y lógica de juego en src/sockets/ y src/data/.

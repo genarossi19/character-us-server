@@ -1,15 +1,20 @@
-import type { CharacterType } from "src/types/Character.ts";
-import Character from "./character.model.ts";
+import Character from "../../../db/models/Character.ts";
+import type { CharacterType } from "../../../db/models/Character.ts";
 
-export const getRandomCharacterByCategory = async (categoryId: string) => {
+export const getRandomCharacterByCategory = async (
+  categoryId: string
+): Promise<CharacterType | null> => {
   const characters = await Character.findAll({
     where: { category_id: categoryId },
+    raw: true,
   });
 
-  if (!characters.length) return null;
+  if (!characters || characters.length === 0) {
+    return null;
+  }
 
   const randomIndex = Math.floor(Math.random() * characters.length);
-  return characters[randomIndex].get({ plain: true });
+  return characters[randomIndex] as unknown as CharacterType;
 };
 
 export async function getCharactersByCategory(
@@ -17,6 +22,8 @@ export async function getCharactersByCategory(
 ): Promise<CharacterType[]> {
   const characters = await Character.findAll({
     where: { category_id: categoryId },
+    raw: true,
   });
-  return characters.map((c) => c.get({ plain: true }));
+
+  return characters as unknown as CharacterType[];
 }
