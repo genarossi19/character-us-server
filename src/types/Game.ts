@@ -9,7 +9,7 @@ export type GamePhase =
 
 export type GameMode = "classic" | "anonymous" | "special";
 
-export type GameWinner = "crew" | "impostor";
+export type GameWinner = "innocent" | "impostor";
 
 export interface RoomSettings {
   category: string;
@@ -19,6 +19,7 @@ export interface RoomSettings {
   privacy: "public" | "private";
   mode: GameMode;
   impostorsKnowEachOther: boolean;
+  visibleVotes: boolean;
   password?: string;
 }
 
@@ -34,6 +35,7 @@ export interface PlayerState {
   characterId: string | null;
   isImpostor: boolean;
   isJoker: boolean;
+  isDebateReady: boolean;
   hasSubmittedWord: boolean;
   word: string | null;
   hasVoted: boolean;
@@ -54,6 +56,8 @@ export interface RoomState {
   turnOrder: string[];
   currentTurnIndex: number;
   phaseTimer: ReturnType<typeof setTimeout> | null;
+  turnTimer: ReturnType<typeof setTimeout> | null;
+  debateTimer: ReturnType<typeof setTimeout> | null;
   votes: Map<string, string>;
   roundResults: RoundResult[];
   chatMessages: ChatMessage[];
@@ -64,6 +68,7 @@ export interface WordHint {
   username: string;
   word: string;
   revealed: boolean;
+  skipped: boolean;
 }
 
 export interface ChatMessage {
@@ -99,15 +104,17 @@ export interface PlayerPublic {
   isGuest: boolean;
   isAlive: boolean;
   isOnline: boolean;
+  hasVoted: boolean;
+  isDebateReady: boolean;
 }
 
 export interface CharacterAssignment {
   character: {
     id: string;
-    name: string;
+    name: string | null;
     imageUrl: string | null;
     category: string;
-  };
+  } | null;
   isImpostor: boolean;
   impostorIds?: string[];
 }

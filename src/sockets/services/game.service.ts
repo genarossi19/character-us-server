@@ -18,6 +18,7 @@ import {
 import { checkWinConditions, calculateVoteResult } from "../../game/winConditions.ts";
 import { getRandomCharacterByCategory } from "../../api/services/character/character.service.ts";
 import { closeRoom, getPublicRoom } from "./room.service.ts";
+import { forgetSocket } from "./room.service.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
 import { v4 as uuidv4 } from "uuid";
 import GameHistory from "../../db/models/GameHistory.ts";
@@ -70,12 +71,14 @@ export async function startCharacterPhase(
       player.characterId = character.id;
 
       io.to(player.socketId).emit("characterAssigned", {
-        character: {
-          id: character.id,
-          name: character.name,
-          imageUrl: character.imageUrl ?? null,
-          category: room.settings.category,
-        },
+        character: player.isImpostor
+          ? null
+          : {
+              id: character.id,
+              name: character.name,
+              imageUrl: character.imageUrl ?? null,
+              category: room.settings.category,
+            },
         isImpostor: player.isImpostor,
         impostorIds,
       });
@@ -87,7 +90,7 @@ export async function startCharacterPhase(
   } catch (error) {
     console.error("Error asignando personajes:", error);
     io.to(room.hostId).emit("roomClosed", {
-      reason: "Error al asignar personajes",
+      reason: "No pudimos preparar la partida. Intenta crear una nueva sala.",
     });
     closeRoom(room.id, "Error al asignar personajes");
   }
@@ -104,8 +107,64 @@ export function startWordPhase(
   io.to(room.id).emit("phaseChanged", { phase: "word" });
 
   emitCurrentTurn(io, room);
+}
 
-  startPhaseTimer(io, room, "word");
+function startTurnTimer(io: SocketIOServer, room: RoomState): void {
+  clearTurnTimer(room);
+
+  room.turnTimer = setTimeout(() => {
+    handleWordTurnTimeout(io, room);
+  }, GAME_CONFIG.WORD_TURN_TIMEOUT);
+}
+
+function clearTurnTimer(room: RoomState): void {
+  if (room.turnTimer) {
+    clearTimeout(room.turnTimer);
+    room.turnTimer = null;
+  }
+}
+
+function handleWordTurnTimeout(
+  io: SocketIOServer,
+  room: RoomState
+): void {
+  room.turnTimer = null;
+
+  if (room.gamePhase !== "word") return;
+
+  const currentSocketId = room.turnOrder[room.currentTurnIndex];
+  if (!currentSocketId) {
+    finishWordPhase(io, room);
+    return;
+  }
+
+  const player = room.players.get(currentSocketId);
+  if (!player || !player.isAlive || player.hasSubmittedWord) {
+    advanceWordTurn(io, room);
+    return;
+  }
+
+  player.word = "Sin palabra";
+  player.hasSubmittedWord = true;
+
+  io.to(room.id).emit("wordHintRevealed", {
+    playerId: player.socketId,
+    username: player.username,
+    word: player.word,
+    skipped: true,
+  });
+
+  const allSubmitted = getAlivePlayers(room).every((p) => p.hasSubmittedWord);
+  if (allSubmitted) {
+    finishWordPhase(io, room);
+  } else {
+    advanceWordTurn(io, room);
+  }
+}
+
+function advanceWordTurn(io: SocketIOServer, room: RoomState): void {
+  room.currentTurnIndex++;
+  emitCurrentTurn(io, room);
 }
 
 function emitCurrentTurn(io: SocketIOServer, room: RoomState): void {
@@ -129,6 +188,8 @@ function emitCurrentTurn(io: SocketIOServer, room: RoomState): void {
     turnIndex: room.currentTurnIndex,
     total: room.turnOrder.length,
   });
+
+  startTurnTimer(io, room);
 }
 
 export function submitWord(
@@ -147,7 +208,7 @@ export function submitWord(
   }
 
   if (!player.isAlive) {
-    return { success: false, error: "Jugador eliminado no puede submitir" };
+    return { success: false, error: "No puedes decir una palabra porque estás eliminado" };
   }
 
   if (player.hasSubmittedWord) {
@@ -158,51 +219,52 @@ export function submitWord(
     return { success: false, error: "No es tu turno" };
   }
 
-  if (!word || word.length === 0) {
+  if (!word || word.trim().length === 0) {
     return { success: false, error: "La palabra no puede estar vacía" };
   }
 
-  if (word.length > GAME_CONFIG.WORD.MAX_LENGTH) {
+  const normalizedWord = word.trim();
+  if (normalizedWord.length > GAME_CONFIG.WORD.MAX_LENGTH) {
     return {
       success: false,
       error: `La palabra no puede tener más de ${GAME_CONFIG.WORD.MAX_LENGTH} caracteres`,
     };
   }
 
-  player.word = word;
+  clearTurnTimer(room);
+
+  player.word = normalizedWord;
   player.hasSubmittedWord = true;
 
   io.to(room.id).emit("wordHintRevealed", {
     playerId: player.socketId,
     username: player.username,
+    word: player.word,
+    skipped: false,
   });
-
-  room.currentTurnIndex++;
 
   const allSubmitted = getAlivePlayers(room).every((p) => p.hasSubmittedWord);
   if (allSubmitted) {
     finishWordPhase(io, room);
   } else {
-    emitCurrentTurn(io, room);
+    advanceWordTurn(io, room);
   }
 
   return { success: true };
 }
 
 function finishWordPhase(io: SocketIOServer, room: RoomState): void {
+  clearTurnTimer(room);
+
   const hints: WordHint[] = getAlivePlayers(room).map((p) => ({
     playerId: p.socketId,
     username: p.username,
     word: p.word || "",
     revealed: true,
+    skipped: p.word === "Sin palabra",
   }));
 
   io.to(room.id).emit("allWordsSubmitted", { hints });
-
-  if (room.phaseTimer) {
-    clearTimeout(room.phaseTimer);
-    room.phaseTimer = null;
-  }
 
   startDebatePhase(io, room);
 }
@@ -213,11 +275,74 @@ export function startDebatePhase(
 ): void {
   room.gamePhase = "debate";
 
+  for (const player of room.players.values()) {
+    player.isDebateReady = false;
+  }
+
   io.to(room.id).emit("phaseChanged", { phase: "debate" });
 
   sendSystemMessage(io, room, "Fase de debate: discutan quién es el impostor");
+  emitDebateReadyUpdate(io, room);
 
-  startPhaseTimer(io, room, "debate");
+  room.debateTimer = setTimeout(() => {
+    room.debateTimer = null;
+    if (room.gamePhase === "debate") {
+      startVotingPhase(io, room);
+    }
+  }, getPhaseDuration("debate"));
+}
+
+export function setDebateReady(
+  io: SocketIOServer,
+  room: RoomState,
+  socketId: string
+): { success: boolean; error?: string } {
+  if (room.gamePhase !== "debate") {
+    return { success: false, error: "No es la fase de debate" };
+  }
+
+  const player = room.players.get(socketId);
+  if (!player) {
+    return { success: false, error: "Jugador no encontrado" };
+  }
+
+  if (!player.isAlive) {
+    return { success: false, error: "Jugador eliminado no puede marcar listo" };
+  }
+
+  if (player.isDebateReady) {
+    return { success: false, error: "Ya marcaste listo" };
+  }
+
+  player.isDebateReady = true;
+  emitDebateReadyUpdate(io, room);
+
+  const alivePlayers = getAlivePlayers(room);
+  const allReady = alivePlayers.every((p) => p.isDebateReady);
+
+  if (allReady) {
+    if (room.debateTimer) {
+      clearTimeout(room.debateTimer);
+      room.debateTimer = null;
+    }
+    startVotingPhase(io, room);
+  }
+
+  return { success: true };
+}
+
+function emitDebateReadyUpdate(
+  io: SocketIOServer,
+  room: RoomState
+): void {
+  const readyPlayers = getAlivePlayers(room)
+    .filter((p) => p.isDebateReady)
+    .map((p) => p.socketId);
+
+  io.to(room.id).emit("debateReadyUpdate", {
+    readyPlayers,
+    total: getAlivePlayers(room).length,
+  });
 }
 
 const lastMessageTimestamp = new Map<string, number>();
@@ -233,11 +358,12 @@ export function sendChatMessage(
     return { success: false, error: "Jugador no encontrado" };
   }
 
-  if (!message || message.length === 0) {
+  if (!message || message.trim().length === 0) {
     return { success: false, error: "El mensaje no puede estar vacío" };
   }
 
-  if (message.length > GAME_CONFIG.CHAT.MAX_MESSAGE_LENGTH) {
+  const normalizedMessage = message.trim();
+  if (normalizedMessage.length > GAME_CONFIG.CHAT.MAX_MESSAGE_LENGTH) {
     return {
       success: false,
       error: `El mensaje no puede tener más de ${GAME_CONFIG.CHAT.MAX_MESSAGE_LENGTH} caracteres`,
@@ -262,7 +388,7 @@ export function sendChatMessage(
     id: uuidv4(),
     senderId: player.socketId,
     senderName: player.username,
-    message,
+    message: normalizedMessage,
     type: isGhost ? "ghost" : "player",
     timestamp: Date.now(),
   };
@@ -270,7 +396,7 @@ export function sendChatMessage(
   room.chatMessages.push(chatMessage);
 
   if (isGhost) {
-    const ghosts = getAlivePlayers(room).filter((p) => !p.isAlive);
+    const ghosts = Array.from(room.players.values()).filter((p) => !p.isAlive);
     for (const ghost of ghosts) {
       io.to(ghost.socketId).emit("chatMessage", chatMessage);
     }
@@ -344,13 +470,31 @@ export function castVote(
     votesRecord[v] = t;
   }
 
+  const visible = room.settings.visibleVotes;
   io.to(room.id).emit("voteUpdate", {
     votes: votesRecord,
     voterId,
-    targetId,
+    targetId: visible ? targetId : undefined,
+    visible,
   });
 
-  const aliveVoters = getAlivePlayers(room).filter((p) => p.isAlive);
+  const aliveVoters = getAlivePlayers(room);
+  const remaining = aliveVoters.filter((p) => !p.hasVoted).length;
+
+  if (visible) {
+    sendSystemMessage(
+      io,
+      room,
+      `${voter.username} ha votado a ${target.username}. Quedan ${remaining} votante${remaining !== 1 ? "s" : ""}`
+    );
+  } else {
+    sendSystemMessage(
+      io,
+      room,
+      `${voter.username} ha votado. Quedan ${remaining} votante${remaining !== 1 ? "s" : ""}`
+    );
+  }
+
   const allVoted = aliveVoters.every((p) => p.hasVoted);
 
   if (allVoted) {
@@ -383,6 +527,8 @@ function finishVotingPhase(
       isGuest: result.eliminated.isGuest,
       isAlive: false,
       isOnline: result.eliminated.isOnline,
+      hasVoted: result.eliminated.hasVoted,
+      isDebateReady: result.eliminated.isDebateReady,
     };
 
     io.to(room.id).emit("playerEliminated", {
@@ -396,6 +542,7 @@ function finishVotingPhase(
     username: p.username,
     word: p.word || "",
     revealed: true,
+    skipped: p.word === "Sin palabra",
   }));
 
   const votesRecord: Record<string, string> = {};
@@ -415,6 +562,8 @@ function finishVotingPhase(
           isGuest: result.eliminated.isGuest,
           isAlive: false,
           isOnline: result.eliminated.isOnline,
+          hasVoted: result.eliminated.hasVoted,
+          isDebateReady: result.eliminated.isDebateReady,
         }
       : null,
     wasImpostor: result.wasImpostor,
@@ -435,7 +584,7 @@ function finishVotingPhase(
   }
 
   if (room.currentRound >= room.settings.totalRounds) {
-    finishGame(io, room, winCheck.winner || "crew");
+    finishGame(io, room, winCheck.winner || "innocent");
     return;
   }
 
@@ -480,9 +629,6 @@ function handlePhaseTimeout(
     case "character":
       startWordPhase(io, room);
       break;
-    case "word":
-      finishWordPhase(io, room);
-      break;
     case "debate":
       startVotingPhase(io, room);
       break;
@@ -499,7 +645,7 @@ function handlePhaseTimeout(
 
 async function persistGameHistory(
   room: RoomState,
-  winner: "crew" | "impostor"
+  winner: "innocent" | "impostor"
 ): Promise<void> {
   try {
     const players = Array.from(room.players.values());
@@ -541,7 +687,7 @@ async function persistGameHistory(
               games_played: (user.get("games_played") as number) + 1,
             };
 
-            if (winner === "crew" && !player.isImpostor) {
+            if (winner === "innocent" && !player.isImpostor) {
               updates.games_won = (user.get("games_won") as number) + 1;
             }
 
@@ -570,7 +716,7 @@ async function persistGameHistory(
 function finishGame(
   io: SocketIOServer,
   room: RoomState,
-  winner: "crew" | "impostor"
+  winner: "innocent" | "impostor"
 ): void {
   room.gamePhase = "finished";
   room.status = "finished";
@@ -578,6 +724,11 @@ function finishGame(
   if (room.phaseTimer) {
     clearTimeout(room.phaseTimer);
     room.phaseTimer = null;
+  }
+  clearTurnTimer(room);
+  if (room.debateTimer) {
+    clearTimeout(room.debateTimer);
+    room.debateTimer = null;
   }
 
   persistGameHistory(room, winner);
@@ -591,6 +742,8 @@ function finishGame(
     isGuest: p.isGuest,
     isAlive: p.isAlive,
     isOnline: p.isOnline,
+    hasVoted: p.hasVoted,
+    isDebateReady: p.isDebateReady,
   }));
 
   io.to(room.id).emit("gameEnded", {
@@ -609,6 +762,7 @@ function finishGame(
     player.isAlive = true;
     player.isImpostor = false;
     player.isJoker = false;
+    player.isDebateReady = false;
     player.characterId = null;
     player.hasSubmittedWord = false;
     player.word = null;
@@ -636,6 +790,7 @@ export function handlePlayerDisconnect(
       const wasHost = currentPlayer.isHost;
 
       room.players.delete(socketId);
+      forgetSocket(socketId);
 
       io.to(room.id).emit("playerLeft", socketId);
       io.to(room.id).emit("roomUpdated", getPublicRoom(room));

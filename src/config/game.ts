@@ -4,11 +4,13 @@ export const GAME_CONFIG = {
 
   PHASE_DURATIONS: {
     character: 6_000,
-    word: 45_000,
-    debate: 90_000,
-    voting: 20_000,
+    word: 0,
+    debate: 40_000,
+    voting: 40_000,
     results: 5_000,
   } as const,
+
+  WORD_TURN_TIMEOUT: 60_000,
 
   RECONNECT_TIMEOUT: 60_000,
 

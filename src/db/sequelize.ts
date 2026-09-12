@@ -9,7 +9,7 @@ if (!process.env.DB_CONNECTION_STRING) {
 
 const sequelize = new Sequelize(process.env.DB_CONNECTION_STRING, {
   dialect: "postgres",
-  logging: true, // true si querés ver queries en consola
+  logging: process.env.NODE_ENV !== "production" ? console.log : false,
   dialectOptions: {
     ssl: {
       require: true,

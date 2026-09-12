@@ -1,19 +1,42 @@
 # CharacterUs Server
 
-Backend de un juego social inspirado en el modo impostor. Un host crea una sala para una categoria, los jugadores entran con un PIN y el host inicia la partida. El servidor elige un personaje: los jugadores normales lo reciben y un impostor elegido al azar no lo ve.
+Backend de CharacterUs. Express expone la API HTTP, Socket.IO controla las salas y la partida en tiempo real, y PostgreSQL/Supabase conserva usuarios, catalogo, historial y estadisticas.
 
-## Estado Actual
+El contrato para el frontend esta en [`frontend.md`](./frontend.md).
 
-- Express expone categorias y personajes por HTTP.
-- Socket.IO mantiene salas y asigna el personaje/rol en tiempo real.
-- PostgreSQL persiste solamente categorias y personajes mediante Sequelize.
-- AdminJS administra esos mismos dos modelos en `/admin`.
-- Las salas y partidas no se persisten: reiniciar el proceso elimina PINs, jugadores y partidas activas.
-- No estan implementados en el runtime actual usuarios, autenticacion de jugadores, votacion, chat, rondas ni resultados, aunque aparezcan en tipos o diagramas historicos.
+## Documentacion rapida
 
-## Puesta En Marcha
+- `GET /docs`: Swagger UI interactivo para la API HTTP.
+- `GET /openapi.json`: especificacion OpenAPI 3.1 en JSON.
+- `GET /docs/socket`: contrato Socket.IO en Markdown. Esta ruta queda como puente hasta incorporar AsyncAPI.
 
-El repositorio no fija una version de Node. La configuracion usa ESM, TypeScript 5.9 y un `package-lock.json` version 3.
+## Runtime
+
+- HTTP y Socket.IO comparten el puerto `3000` por defecto.
+- Socket.IO usa exclusivamente el transporte `websocket`.
+- El servidor escucha en `0.0.0.0`, para pruebas desde la LAN.
+- Las salas, turnos, roles, votos y chat viven en memoria. Un reinicio termina las partidas activas.
+
+## Persistencia
+
+El backend no sincroniza ni migra el esquema al iniciar. Supabase debe tener estas tablas:
+
+| Tabla | Uso |
+| --- | --- |
+| `users` | Cuentas, credenciales bcrypt y estadisticas acumuladas. |
+| `category` | Categorias jugables. |
+| `character` | Personajes, vinculados por `category_id`. |
+| `game_history` | Resumen de cada partida terminada. |
+| `game_players` | Participantes y resultado individual de cada partida. |
+
+Campos contractuales relevantes:
+
+- `users.password_hash`: hash bcrypt. La API recibe `password`, pero nunca lo persiste en texto plano.
+- `character.image`: `TEXT`. La API usa y serializa `imageUrl`; Sequelize lo mapea a la columna `image`.
+- `game_history.winner`: enum con solo `innocent` e `impostor`.
+- `avatarUrl` no pertenece a `users`; solo identifica al jugador dentro de una sala y se envia por Socket.IO.
+
+## Inicio local
 
 ```bash
 npm ci
@@ -21,72 +44,41 @@ cp .env.example .env
 npm run dev
 ```
 
-El servidor usa `http://localhost:3000` por defecto y acepta el frontend en `http://localhost:5173`. La importacion de los modelos exige `DB_CONNECTION_STRING`, aunque la conexion se abre de forma diferida al ejecutar una consulta.
-
-Variables:
+Variables requeridas:
 
 | Variable | Uso |
 | --- | --- |
-| `DB_CONNECTION_STRING` | URL de PostgreSQL; obligatoria. La conexion actual fuerza SSL. |
-| `PORT` | Puerto HTTP/Socket.IO; por defecto `3000`. |
-| `ADMIN_EMAIL` | Usuario unico del login de AdminJS. |
-| `ADMIN_HASH` | Hash bcrypt de la contrasena de AdminJS, no texto plano. |
-| `COOKIE_SECRET` | Firma de la sesion de AdminJS; debe ser un secreto largo. |
+| `DB_CONNECTION_STRING` | Conexion PostgreSQL/Supabase. |
+| `JWT_SECRET` | Firma y verificacion de JWT. |
+| `ADMIN_EMAIL` | Cuenta administradora de AdminJS y rutas de escritura. |
+| `ADMIN_HASH` | Hash bcrypt del acceso a AdminJS. |
+| `PORT` | Puerto del servidor; por defecto `3000`. |
 
-No hay migraciones ni seed. El esquema debe existir antes de usar la API. No se debe usar `sequelize.sync({ alter: true })` sobre una base con datos sin una decision explicita.
+## Autenticacion
+
+- `POST /api/auth/signup` registra `username`, `email`, `password` y `confirmPassword`; persiste solo el hash bcrypt.
+- `POST /api/auth/login` devuelve un JWT de acceso y el perfil público actual.
+- `GET /api/auth/me` devuelve el perfil actualizado a partir de un JWT Bearer válido.
+- Los JWT duran una hora, usan `HS256`, emisor y audiencia configurables; nunca contienen hashes ni contraseñas.
+- Solo una cuenta con JWT vigente puede enviar `createRoom`; el token se envia en el payload de ese evento y el nombre debe coincidir con la sesión.
+- Las mutaciones de categorias y personajes requieren `Authorization: Bearer <token>` de la cuenta configurada como admin.
+
+## Juego
+
+El flujo es `waiting -> character -> word -> debate -> voting -> results`.
+
+- Cada turno de palabra dura hasta 60 segundos.
+- Debate y votacion duran 40 segundos.
+- El chat esta habilitado durante debate y votacion.
+- El valor de ganador emitido y persistido es `innocent` o `impostor`.
 
 ## Comandos
 
-| Comando | Resultado actual |
+| Comando | Uso |
 | --- | --- |
-| `npm run dev` | Inicia nodemon con `ts-node ./src/index.ts`. |
-| `npm run build` | Ejecuta `tsc`; actualmente falla por un import NodeNext sin extension y nunca emite archivos porque `noEmit` esta activo. |
-| `npm start` | Intenta ejecutar `dist/index.js`; actualmente falla porque el build no genera `dist/`. |
-| `npx ts-node src/db/tests/testConnection.ts` | Prueba manual de conexion; hay que leer la salida porque un error no produce exit code distinto de cero. |
+| `npm run dev` | Inicia el servidor con nodemon y ts-node. |
+| `npx tsc --noEmit` | Verificacion de tipos. |
+| `npx ts-node src/db/tests/testConnection.ts` | Prueba manual de conexion PostgreSQL. Revisar la salida: no falla el exit code ante error. |
+| `npm run verify:supabase` | Verificacion de solo lectura de Supabase y endpoints. Usar `AUTH_TEST_WRITE=true npm run verify:supabase` para probar registro, login y `/me` con un usuario temporal que se elimina al finalizar. |
 
-No hay scripts de lint ni tests automatizados.
-
-## HTTP
-
-| Metodo | Ruta | Comportamiento |
-| --- | --- | --- |
-| `GET` | `/api/category/` | Lista `{ id, name }`; actualmente no filtra por `status`. |
-| `GET` | `/api/category/:id` | Devuelve la categoria completa. |
-| `POST` | `/api/category/` | Crea una categoria. |
-| `PUT` | `/api/category/:id` | Actualiza una categoria. |
-| `DELETE` | `/api/category/:id` | Elimina una categoria. |
-| `GET` | `/api/character/` | Lista todos los personajes. |
-| `GET` | `/api/character/:id` | Devuelve un personaje. |
-| `GET` | `/api/character/category/:categoryId` | Lista personajes de una categoria. |
-| `GET` | `/api/character/random/:categoryId` | Devuelve un personaje aleatorio de una categoria. |
-| `POST` | `/api/character/` | Crea un personaje; recibe `name`, `description`, `image`, `category_id`. |
-| `PUT` | `/api/character/:id` | Actualiza un personaje. |
-| `DELETE` | `/api/character/:id` | Elimina un personaje. |
-| `GET` | `/test` | Sirve el harness manual legado de `client/index.html`. |
-
-Las mutaciones REST no tienen autenticacion actualmente. La autenticacion de `/admin` no se aplica a `/api/*`.
-
-## Socket.IO
-
-El cliente debe usar transporte WebSocket. Los callbacks son acknowledgements de Socket.IO, no eventos separados.
-
-| Evento cliente -> servidor | Payload | Ack |
-| --- | --- | --- |
-| `createRoom` | `{ username: string, categoryId: string }` | `{ internalId, gamePin }` |
-| `joinRoom` | `{ gamePin: number, username: string }` | `{ success, message }` |
-| `startGame` | `{ gamePin: number }` | `{ success, message? }`; solo puede enviarlo el host. |
-
-| Evento servidor -> cliente | Payload |
-| --- | --- |
-| `updatePlayers` | `{ players, hostId }`; hoy `players` reutiliza los objetos internos de la sala. |
-| `gameStarted` | `{ categoryId, character, amIImpostor }`; se envia individualmente y `character` es `null` para el impostor. |
-
-El payload privado de `gameStarted` es el contrato intencional. Existe un defecto conocido: si alguien entra o sale despues del inicio, `updatePlayers` puede incluir `characterId` e `isImpostor` de jugadores existentes y revelar la partida. Los clientes no deben depender de esos campos; ver `docs/TECHNICAL_DEBT.md`.
-
-El flujo implementado termina en la asignacion inicial. No existe todavia un evento activo para finalizar o reiniciar la partida.
-
-## Documentacion
-
-- `AGENTS.md`: contexto operativo compacto para agentes.
-- `docs/ARCHITECTURE.md`: componentes, estado y secuencia del juego actual.
-- `docs/TECHNICAL_DEBT.md`: inconsistencias verificadas y mejoras propuestas, sin aplicarlas.
+`npm run build` conserva una configuracion de emision pendiente: TypeScript valida, pero `noEmit` impide generar `dist/`; por tanto `npm start` no es una verificacion de produccion valida todavia.

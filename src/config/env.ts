@@ -17,6 +17,8 @@ for (const key of required) {
 export const env = {
   DB_CONNECTION_STRING: process.env.DB_CONNECTION_STRING!,
   JWT_SECRET: process.env.JWT_SECRET!,
+  JWT_ISSUER: process.env.JWT_ISSUER || "character-us-server",
+  JWT_AUDIENCE: process.env.JWT_AUDIENCE || "character-us-client",
   COOKIE_SECRET:
     process.env.COOKIE_SECRET || "dev-only-secret-change-in-production",
   ADMIN_EMAIL: process.env.ADMIN_EMAIL!,

@@ -6,12 +6,14 @@ import type {
   CharacterAssignment,
   ChatMessage,
   GamePhase,
+  WordHint,
 } from "./game.ts";
 
 export interface CreateRoomPayload {
   username: string;
   settings: RoomSettings;
   avatarUrl?: string;
+  token: string;
 }
 
 export interface JoinRoomPayload {
@@ -51,6 +53,14 @@ export interface SendChatMessagePayload {
   message: string;
 }
 
+export interface DebateReadyPayload {
+  roomId: string;
+}
+
+export interface ChangeAvatarPayload {
+  avatarId: string;           // "avatar-1" .. "avatar-8"
+}
+
 export interface AckSuccess<T = void> {
   success: true;
   data?: T;
@@ -73,6 +83,8 @@ export interface SocketToServerEvents {
   submitWord: (payload: SubmitWordPayload, ack: Ack) => void;
   votePlayer: (payload: VotePlayerPayload, ack: Ack) => void;
   sendChatMessage: (payload: SendChatMessagePayload, ack: Ack) => void;
+  debateReady: (payload: DebateReadyPayload, ack: Ack) => void;
+  changeAvatar: (payload: ChangeAvatarPayload, ack: Ack) => void;
 }
 
 export interface ServerToClientEvents {
@@ -90,12 +102,14 @@ export interface ServerToClientEvents {
     turnIndex: number;
     total: number;
   }) => void;
-  wordHintRevealed: (data: { playerId: string; username: string }) => void;
-  allWordsSubmitted: (data: { hints: { playerId: string; username: string; word: string; revealed: boolean }[] }) => void;
+  wordHintRevealed: (data: { playerId: string; username: string; word: string; skipped: boolean }) => void;
+  allWordsSubmitted: (data: { hints: WordHint[] }) => void;
+  debateReadyUpdate: (data: { readyPlayers: string[]; total: number }) => void;
   voteUpdate: (data: {
     votes: Record<string, string>;
     voterId: string;
-    targetId: string;
+    targetId?: string;
+    visible: boolean;
   }) => void;
   playerEliminated: (data: { player: PlayerPublic; wasImpostor: boolean }) => void;
   roundResults: (result: RoundResult) => void;

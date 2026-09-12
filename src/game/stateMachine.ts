@@ -70,6 +70,7 @@ export function resetPlayerForNewRound(player: PlayerState): void {
   player.word = null;
   player.hasVoted = false;
   player.votedFor = null;
+  player.isDebateReady = false;
 }
 
 export function prepareRoomForNextRound(room: RoomState): void {

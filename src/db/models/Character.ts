@@ -29,9 +29,9 @@ const Character = sequelize.define<
       allowNull: true,
     },
     imageUrl: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
-      field: "image_url",
+      field: "image",
     },
     category_id: {
       type: DataTypes.UUID,

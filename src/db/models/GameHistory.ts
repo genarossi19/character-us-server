@@ -5,7 +5,7 @@ export interface GameHistoryType {
   id: string;
   room_id: string;
   category: string;
-  winner: "crew" | "impostor";
+  winner: "innocent" | "impostor";
   total_rounds: number;
   player_count: number;
   impostor_count: number;
@@ -31,7 +31,7 @@ const GameHistory = sequelize.define<
       allowNull: false,
     },
     winner: {
-      type: DataTypes.ENUM("crew", "impostor"),
+      type: DataTypes.ENUM("innocent", "impostor"),
       allowNull: false,
     },
     total_rounds: {

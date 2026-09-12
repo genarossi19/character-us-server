@@ -20,7 +20,6 @@ export async function getLeaderboard(req: Request, res: Response) {
       attributes: [
         "id",
         "username",
-        "avatar_url",
         "games_played",
         "games_won",
         "times_impostor",
@@ -32,8 +31,8 @@ export async function getLeaderboard(req: Request, res: Response) {
 
     res.json(users);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener leaderboard" });
+    console.error("Error al obtener leaderboard:", error);
+    res.status(500).json({ message: "No pudimos cargar el ranking. Intenta nuevamente." });
   }
 }
 
@@ -45,7 +44,6 @@ export async function getUserStats(req: Request, res: Response) {
       attributes: [
         "id",
         "username",
-        "avatar_url",
         "games_played",
         "games_won",
         "times_impostor",
@@ -67,7 +65,7 @@ export async function getUserStats(req: Request, res: Response) {
 
     res.json({ user, recentGames });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener estadísticas" });
+    console.error("Error al obtener estadísticas:", error);
+    res.status(500).json({ message: "No pudimos cargar las estadísticas. Intenta nuevamente." });
   }
 }

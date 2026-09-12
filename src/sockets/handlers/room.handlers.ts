@@ -5,6 +5,7 @@ import type {
   LeaveRoomPayload,
   StartGamePayload,
   KickPlayerPayload,
+  ChangeAvatarPayload,
 } from "../../types/socket.ts";
 import {
   createRoom as createRoomService,
@@ -12,38 +13,71 @@ import {
   removePlayerFromRoom,
   deleteRoom,
   getRoom,
+  getRoomBySocket,
   getPublicRoom,
+  changeAvatar as changeAvatarService,
 } from "../services/room.service.ts";
-import { canStartGame, isHost, getAlivePlayers } from "../../game/stateMachine.ts";
-import { startCharacterPhase, handlePlayerDisconnect, handlePlayerReconnect } from "../services/game.service.ts";
+import { canStartGame, isHost } from "../../game/stateMachine.ts";
+import { startCharacterPhase, handlePlayerDisconnect } from "../services/game.service.ts";
+import { verifyAccessToken } from "../../auth/accessToken.ts";
+import User from "../../db/models/User.ts";
 
 export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
-  socket.on("createRoom", (payload: CreateRoomPayload, ack) => {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  socket.on("createRoom", async (payload: CreateRoomPayload, ack) => {
     try {
+      if (!payload.token) {
+        return ack({ success: false, message: "Se requiere autenticación para crear sala", code: "AUTH_REQUIRED" });
+      }
+
+      const authenticatedUser = verifyAccessToken(payload.token);
+      if (!authenticatedUser) {
+        return ack({ success: false, message: "Token inválido o expirado", code: "AUTH_INVALID" });
+      }
+
+      const user = await User.findByPk(authenticatedUser.id);
+      if (!user) {
+        return ack({ success: false, message: "La sesión ya no corresponde a un usuario activo", code: "AUTH_INVALID" });
+      }
+
+      const currentUsername = user.get("username") as string;
+
       if (!payload.username || payload.username.trim().length === 0) {
         return ack({ success: false, message: "El nombre de usuario es requerido", code: "INVALID_USERNAME" });
+      }
+
+      if (payload.username.trim() !== currentUsername) {
+        return ack({ success: false, message: "El nombre debe coincidir con la sesión iniciada", code: "USERNAME_MISMATCH" });
       }
 
       if (!payload.settings) {
         return ack({ success: false, message: "La configuración es requerida", code: "INVALID_SETTINGS" });
       }
 
+      if (!payload.settings.category || !UUID_RE.test(payload.settings.category)) {
+        return ack({ success: false, message: "Selecciona una categoría válida.", code: "INVALID_CATEGORY" });
+      }
+
       const room = createRoomService(
         socket.id,
         payload.username.trim(),
         payload.settings,
-        payload.avatarUrl || "",
-        null,
-        true,
+        "",
+        authenticatedUser.id,
+        false,
         `Sala de ${payload.username}`
       );
+
+      socket.join(room.id);
+      console.log(`[createRoom] ${socket.id} joined room ${room.id} (code ${room.code})`);
 
       socket.emit("roomUpdated", getPublicRoom(room));
 
       ack({ success: true, data: { room: getPublicRoom(room) } });
     } catch (error) {
       console.error("Error en createRoom:", error);
-      ack({ success: false, message: "Error al crear sala", code: "INTERNAL_ERROR" });
+      ack({ success: false, message: "No pudimos crear la sala. Intenta nuevamente.", code: "INTERNAL_ERROR" });
     }
   });
 
@@ -57,7 +91,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         socket.id,
         payload.code,
         payload.username.trim(),
-        payload.avatarUrl || "",
+        "",
         payload.userId || null,
         payload.isGuest,
         payload.password
@@ -79,13 +113,17 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
 
       const room = result.room;
+      socket.join(room.id);
+      console.log(`[joinRoom] ${socket.id} joined room ${room.id} (code ${room.code}) | players: ${room.players.size}`);
+
       const publicRoom = getPublicRoom(room);
+      const joinedPlayer = publicRoom.players.find((p) => p.socketId === socket.id);
 
       io.to(room.id).emit("playerJoined", {
         socketId: socket.id,
         userId: payload.userId || null,
         username: payload.username.trim(),
-        avatarUrl: payload.avatarUrl || "",
+        avatarUrl: joinedPlayer?.avatarUrl || "",
         isHost: false,
         isGuest: payload.isGuest,
         isAlive: true,
@@ -97,7 +135,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       ack({ success: true, data: { room: publicRoom } });
     } catch (error) {
       console.error("Error en joinRoom:", error);
-      ack({ success: false, message: "Error al unirse a la sala", code: "INTERNAL_ERROR" });
+      ack({ success: false, message: "No pudimos unirte a la sala. Intenta nuevamente.", code: "INTERNAL_ERROR" });
     }
   });
 
@@ -109,6 +147,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
 
       const { room, player, wasHost } = result;
+
+      socket.leave(room.id);
 
       io.to(room.id).emit("playerLeft", socket.id);
 
@@ -128,7 +168,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       ack({ success: true });
     } catch (error) {
       console.error("Error en leaveRoom:", error);
-      ack({ success: false, message: "Error al salir de la sala", code: "INTERNAL_ERROR" });
+      ack({ success: false, message: "No pudimos sacarte de la sala. Intenta nuevamente.", code: "INTERNAL_ERROR" });
     }
   });
 
@@ -149,6 +189,10 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
 
       room.status = "playing";
+      room.gamePhase = "character";
+      room.currentRound = 1;
+      room.roundResults = [];
+      room.chatMessages = [];
 
       const publicRoom = getPublicRoom(room);
       io.to(room.id).emit("gameStarted", {
@@ -161,7 +205,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       ack({ success: true, data: { room: publicRoom } });
     } catch (error) {
       console.error("Error en startGame:", error);
-      ack({ success: false, message: "Error al iniciar el juego", code: "INTERNAL_ERROR" });
+      ack({ success: false, message: "No pudimos iniciar la partida. Intenta nuevamente.", code: "INTERNAL_ERROR" });
     }
   });
 
@@ -185,7 +229,10 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         return ack({ success: false, message: "Jugador no encontrado", code: "PLAYER_NOT_FOUND" });
       }
 
-      room.players.delete(payload.targetId);
+      removePlayerFromRoom(payload.targetId);
+
+      const targetSocket = io.sockets.sockets.get(payload.targetId);
+      targetSocket?.leave(room.id);
 
       io.to(payload.targetId).emit("playerKicked", payload.targetId);
       io.to(room.id).emit("playerLeft", payload.targetId);
@@ -194,19 +241,64 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       ack({ success: true });
     } catch (error) {
       console.error("Error en kickPlayer:", error);
-      ack({ success: false, message: "Error al expulsar jugador", code: "INTERNAL_ERROR" });
+      ack({ success: false, message: "No pudimos expulsar a ese jugador. Intenta nuevamente.", code: "INTERNAL_ERROR" });
+    }
+  });
+
+  socket.on("changeAvatar", (payload: ChangeAvatarPayload, ack) => {
+    try {
+      const room = getRoomBySocket(socket.id);
+      if (!room) {
+        return ack({ success: false, message: "No estás en ninguna sala", code: "NOT_IN_ROOM" });
+      }
+
+      if (room.status !== "waiting") {
+        return ack({ success: false, message: "Solo puedes cambiar avatar en la sala de espera", code: "GAME_IN_PROGRESS" });
+      }
+
+      const result = changeAvatarService(room.id, socket.id, payload.avatarId);
+      if ("error" in result) {
+        const codeMap: Record<string, string> = {
+          "Avatar no válido": "INVALID_AVATAR",
+          "Este avatar ya está en uso": "AVATAR_TAKEN",
+        };
+        return ack({
+          success: false,
+          message: result.error,
+          code: codeMap[result.error] || "AVATAR_ERROR",
+        });
+      }
+
+      const publicRoom = getPublicRoom(result.room);
+      const playerInRoom = publicRoom.players.find((p) => p.socketId === socket.id);
+
+      const sioRoom = io.sockets.adapter.rooms.get(room.id);
+      const sioMembers = sioRoom ? Array.from(sioRoom) : [];
+      console.log(`[changeAvatar] ${socket.id} => ${playerInRoom?.avatarUrl} | SIO room members(${sioMembers.length}): ${sioMembers.join(", ")} | players in map: ${publicRoom.players.map((p) => p.socketId).join(", ")}`);
+
+      io.to(room.id).emit("roomUpdated", publicRoom);
+      ack({ success: true });
+    } catch (error) {
+      console.error("Error en changeAvatar:", error);
+      ack({ success: false, message: "No pudimos cambiar tu avatar. Intenta nuevamente.", code: "INTERNAL_ERROR" });
     }
   });
 
   socket.on("disconnect", () => {
-    const result = removePlayerFromRoom(socket.id);
-    if (!result) return;
+    const room = getRoomBySocket(socket.id);
+    if (!room) return;
 
-    const { room, player, wasHost } = result;
+    const player = room.players.get(socket.id);
+    if (!player) return;
 
     if (room.status === "playing") {
       handlePlayerDisconnect(io, room, socket.id);
     } else {
+      const result = removePlayerFromRoom(socket.id);
+      if (!result) return;
+
+      const { wasHost } = result;
+
       io.to(room.id).emit("playerLeft", socket.id);
 
       if (wasHost) {

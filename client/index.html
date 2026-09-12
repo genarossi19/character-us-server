@@ -2,131 +2,669 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <title>CharacterUs Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CharacterUs Socket Lab</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121a33;
+        --panel-2: #172142;
+        --text: #ecf2ff;
+        --muted: #8fa3c7;
+        --ok: #40d27a;
+        --warn: #ffd166;
+        --err: #ff5f6d;
+        --accent: #7c5cff;
+        --line: #26345f;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top left, #1f2b59 0, #0b1020 42%);
+        color: var(--text);
+      }
+
+      header {
+        padding: 24px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(11, 16, 32, 0.78);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        backdrop-filter: blur(12px);
+      }
+
+      h1 { margin: 0 0 6px; font-size: 28px; }
+      h2, h3 { margin: 0 0 12px; }
+      p { margin: 0; color: var(--muted); }
+
+      main {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .panel {
+        background: linear-gradient(180deg, var(--panel), #0f1630);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow: 0 16px 60px rgba(0, 0, 0, 0.25);
+      }
+
+      .stack { display: grid; gap: 12px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+      label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+      input, select, textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #0b1228;
+        color: var(--text);
+        padding: 10px 11px;
+        outline: none;
+      }
+
+      textarea { min-height: 72px; resize: vertical; }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        background: var(--accent);
+        color: white;
+        padding: 10px 12px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      button.secondary { background: #26345f; }
+      button.danger { background: #c7354d; }
+      button.good { background: #168a4a; }
+      button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+      .clients {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        gap: 16px;
+      }
+
+      .client-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+
+      .client-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px;
+        background: var(--panel-2);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .client-body { padding: 14px; display: grid; gap: 10px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #0b1228;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .pill.ok { color: var(--ok); }
+      .pill.warn { color: var(--warn); }
+      .pill.err { color: var(--err); }
+
+      .room-box, .log-box, .players-box {
+        background: #080d1d;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+      }
+
+      .players { display: grid; gap: 6px; margin-top: 8px; }
+      .player {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px;
+        border-radius: 10px;
+        background: #101833;
+        font-size: 13px;
+      }
+
+      .log-box {
+        height: 220px;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+
+      .event { color: #b7c6e8; margin-bottom: 8px; }
+      .event.in { color: #8bd3ff; }
+      .event.out { color: #c9a7ff; }
+      .event.err { color: var(--err); }
+      .event.ok { color: var(--ok); }
+
+      pre {
+        margin: 0;
+        overflow: auto;
+        max-height: 260px;
+        color: #cbd7f4;
+      }
+
+      @media (max-width: 980px) {
+        main { grid-template-columns: 1fr; }
+        header { position: static; }
+      }
+    </style>
   </head>
   <body>
-    <h1>Prueba CharacterUs</h1>
+    <header>
+      <h1>CharacterUs Socket Lab</h1>
+      <p>Simulador local para probar múltiples sockets contra <code>/test</code>. Cada tarjeta es un cliente Socket.IO independiente.</p>
+    </header>
 
-    <!-- Crear Sala -->
-    <h2>Crear Sala</h2>
-    <button id="createRoomBtn">Crear Sala</button>
-    <p id="roomPin">PIN de la sala: -</p>
+    <main>
+      <aside class="panel stack">
+        <h2>Configuración rápida</h2>
 
-    <!-- Unirse a Sala -->
-    <h2>Unirse a Sala</h2>
-    <button id="joinRoomBtn">Unirse</button>
+        <div class="stack">
+          <label>
+            Categoría (DB)
+            <select id="category"><option value="">Cargando...</option></select>
+          </label>
+          <div class="grid">
+            <label>
+              Impostores
+              <select id="impostorCount">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </label>
+            <label>
+              Rondas
+              <select id="totalRounds">
+                <option value="3">3</option>
+                <option value="5">5</option>
+                <option value="7">7</option>
+                <option value="10">10</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid">
+            <label>
+              Máx. jugadores
+              <select id="maxPlayers">
+                <option value="4">4</option>
+                <option value="6" selected>6</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label>
+              Privacidad
+              <select id="privacy">
+                <option value="private">private</option>
+                <option value="public">public</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid">
+            <label>
+              Modo
+              <select id="mode">
+                <option value="classic">classic</option>
+                <option value="anonymous">anonymous</option>
+                <option value="special">special</option>
+              </select>
+            </label>
+            <label>
+              Impostores se conocen
+              <select id="impostorsKnowEachOther">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Votos visibles
+            <select id="visibleVotes">
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </label>
+          <label>
+            Password opcional de sala
+            <input id="roomPassword" placeholder="vacío = sin password" />
+          </label>
+        </div>
 
-    <!-- Iniciar Juego -->
-    <h2>Iniciar Juego (solo host)</h2>
-    <button id="startGameBtn">Iniciar Juego</button>
+        <div class="row">
+          <button id="addClientBtn">Agregar cliente</button>
+          <button id="addThreeBtn" class="secondary">Agregar 3</button>
+          <button id="connectAllBtn" class="good">Conectar todos</button>
+          <button id="disconnectAllBtn" class="danger">Desconectar todos</button>
+        </div>
 
-    <!-- Lista de jugadores -->
-    <h2>Jugadores en la sala:</h2>
-    <ul id="playersList"></ul>
+        <div class="room-box">
+          <h3>Última sala vista</h3>
+          <div class="row">
+            <span class="pill">Room ID: <b id="lastRoomId">-</b></span>
+            <span class="pill">Code: <b id="lastCode">-</b></span>
+          </div>
+          <pre id="lastRoomJson">Sin sala todavía</pre>
+        </div>
 
-    <!-- Socket.IO -->
+        <div class="room-box">
+          <h3>Notas de uso</h3>
+          <p>1. Agrega 3 clientes, conecta todos, crea sala con uno y une los otros con el código.</p>
+          <p>2. Para iniciar partida necesitas un Category ID que tenga personajes en DB.</p>
+          <p>3. En fase word, solo el cliente marcado como turno actual puede enviar palabra.</p>
+        </div>
+      </aside>
+
+      <section class="stack">
+        <div class="clients" id="clients"></div>
+      </section>
+    </main>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-
     <script>
-      const socket = io("http://localhost:3000");
+      const clientsEl = document.getElementById("clients");
+      const state = { clients: [], seq: 1, lastRoom: null };
 
-      const playersList = document.getElementById("playersList");
-      const roomPinElement = document.getElementById("roomPin");
-      const startGameBtn = document.getElementById("startGameBtn");
+      const eventNames = [
+        "roomUpdated",
+        "playerJoined",
+        "playerLeft",
+        "playerKicked",
+        "roomClosed",
+        "gameStarted",
+        "characterAssigned",
+        "phaseChanged",
+        "turnChanged",
+        "wordHintRevealed",
+        "allWordsSubmitted",
+        "debateReadyUpdate",
+        "voteUpdate",
+        "playerEliminated",
+        "roundResults",
+        "gameEnded",
+        "chatMessage",
+        "reconnectTimeout",
+      ];
 
-      let currentRoomPin = null;
-      let mySocketId = null;
+      function getSettings() {
+        const password = document.getElementById("roomPassword").value.trim();
+        return {
+          category: document.getElementById("category").value.trim(),
+          impostorCount: Number(document.getElementById("impostorCount").value),
+          totalRounds: Number(document.getElementById("totalRounds").value),
+          maxPlayers: Number(document.getElementById("maxPlayers").value),
+          privacy: document.getElementById("privacy").value,
+          mode: document.getElementById("mode").value,
+          impostorsKnowEachOther: document.getElementById("impostorsKnowEachOther").value === "true",
+          visibleVotes: document.getElementById("visibleVotes")?.value === "true" ?? true,
+          ...(password ? { password } : {}),
+        };
+      }
 
-      socket.on("connect", () => {
-        mySocketId = socket.id;
-        console.log("Conectado con socket ID:", mySocketId);
-      });
+      function pretty(data) {
+        return JSON.stringify(data, null, 2);
+      }
 
-      /** Función para actualizar la lista de jugadores */
-      function updatePlayersList(players, hostId) {
-        playersList.innerHTML = "";
-        players.forEach((p) => {
-          let displayName = p.username;
-          if (p.socketId === hostId) displayName += " (host)";
-          if (p.socketId === mySocketId) displayName += " (tú)";
-          const li = document.createElement("li");
-          li.innerText = displayName;
-          playersList.appendChild(li);
+      function now() {
+        return new Date().toLocaleTimeString();
+      }
+
+      function setLastRoom(room) {
+        if (!room) return;
+        state.lastRoom = room;
+        document.getElementById("lastRoomId").textContent = room.id;
+        document.getElementById("lastCode").textContent = room.code;
+        document.getElementById("lastRoomJson").textContent = pretty(room);
+      }
+
+      function addLog(client, type, label, data) {
+        client.logs ||= [];
+        client.logs.unshift({ type, text: `[${now()}] ${label}${data === undefined ? "" : "\n" + pretty(data)}` });
+        client.logs = client.logs.slice(0, 120);
+        if (client.logEl) {
+          client.logEl.innerHTML = client.logs
+            .map((entry) => `<div class="event ${entry.type}">${escapeHtml(entry.text)}</div>`)
+            .join("");
+        }
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function ackLog(client, eventName, response) {
+        addLog(client, response?.success === false ? "err" : "ok", `ACK ${eventName}`, response);
+        if (response?.success && eventName === "leaveRoom") {
+          client.room = null;
+          client.character = null;
+          client.phase = "waiting";
+          client.turn = null;
+        }
+        const room = response?.data?.room;
+        if (room) {
+          client.room = room;
+          setLastRoom(room);
+          renderClient(client);
+        }
+      }
+
+      function buildPlayerOptions(client, onlyAlive = false) {
+        const players = client.room?.players || [];
+        return players
+          .filter((p) => !onlyAlive || p.isAlive)
+          .map((p) => `<option value="${p.socketId}">${p.username}${p.socketId === client.socket?.id ? " (yo)" : ""}${p.isHost ? " host" : ""}${!p.isAlive ? " muerto" : ""}</option>`)
+          .join("");
+      }
+
+      function emitWithAck(client, eventName, payload) {
+        if (!client.socket?.connected) {
+          addLog(client, "err", `No conectado para ${eventName}`);
+          return;
+        }
+        addLog(client, "out", `EMIT ${eventName}`, payload);
+        client.socket.emit(eventName, payload, (response) => ackLog(client, eventName, response));
+      }
+
+      function connectClient(client) {
+        if (client.socket?.connected) return;
+
+        const socket = io(window.location.origin, {
+          transports: ["websocket"],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          reconnectionAttempts: Infinity,
+        });
+
+        client.socket = socket;
+        socket.on("connect", () => {
+          client.socketId = socket.id;
+          addLog(client, "ok", "connect", { socketId: socket.id });
+          renderClient(client);
+        });
+        socket.on("disconnect", (reason) => {
+          addLog(client, "warn", "disconnect", { reason });
+          renderClient(client);
+        });
+        socket.on("connect_error", (error) => addLog(client, "err", "connect_error", { message: error.message }));
+
+        socket.io.on("reconnect_attempt", (attempt) => addLog(client, "warn", "reconnect_attempt", { attempt }));
+        socket.io.on("reconnect", (attempt) => addLog(client, "ok", "reconnect", { attempt }));
+        socket.io.on("reconnect_error", (error) => addLog(client, "err", "reconnect_error", { message: error.message }));
+
+        eventNames.forEach((eventName) => {
+          socket.on(eventName, (data) => {
+            addLog(client, "in", `EVENT ${eventName}`, data);
+            if (eventName === "roomUpdated") {
+              client.room = data;
+              setLastRoom(data);
+            }
+            if (eventName === "gameStarted") {
+              client.room = data.room;
+              setLastRoom(data.room);
+            }
+            if (eventName === "characterAssigned") client.character = data;
+            if (eventName === "phaseChanged") client.phase = data.phase;
+            if (eventName === "turnChanged") client.turn = data;
+            if (eventName === "allWordsSubmitted") client.hints = data.hints;
+            if (eventName === "voteUpdate") client.votes = data.votes;
+            if (eventName === "roundResults") client.lastRound = data;
+            if (eventName === "gameEnded") client.result = data;
+            if (eventName === "playerKicked" && data === socket.id) client.room = null;
+            if (eventName === "roomClosed") client.room = null;
+            renderClient(client);
+          });
         });
       }
 
-      /** Crear sala */
-      document.getElementById("createRoomBtn").addEventListener("click", () => {
-        const username = prompt("Ingresa tu nombre de jugador:");
-        const categoryId = prompt("Ingresa la categoría (id) para la partida:");
-        if (!username || !categoryId) return;
+      function disconnectClient(client) {
+        client.socket?.disconnect();
+        renderClient(client);
+      }
 
-        socket.emit("createRoom", { username, categoryId }, (res) => {
-          currentRoomPin = res.gamePin;
-          roomPinElement.innerText = `PIN de la sala: ${res.gamePin}`;
-          console.log("Sala creada:", res);
+      function createClient() {
+        const id = state.seq++;
+        const client = {
+          id,
+          username: `Player ${id}`,
+          avatarUrl: `/avatars/test-${id}.webp`,
+          socket: null,
+          socketId: null,
+          room: null,
+          character: null,
+          phase: "waiting",
+          turn: null,
+          votes: {},
+          hints: [],
+          lastRound: null,
+          result: null,
+          logs: [],
+        };
+        state.clients.push(client);
+        renderClient(client, true);
+        connectClient(client);
+      }
 
-          // Lista inicial de jugadores
-          updatePlayersList([{ socketId: socket.id, username }], socket.id);
+      function renderClient(client, append = false) {
+        let card = document.getElementById(`client-${client.id}`);
+        if (!card) {
+          card = document.createElement("article");
+          card.className = "client-card";
+          card.id = `client-${client.id}`;
+          clientsEl.appendChild(card);
+        }
+
+        const connected = !!client.socket?.connected;
+        const me = client.room?.players?.find((p) => p.socketId === client.socket?.id);
+        const isHost = !!me?.isHost;
+        const isMyTurn = client.turn?.playerId === client.socket?.id;
+        const roomId = client.room?.id || "";
+        const code = client.room?.code || state.lastRoom?.code || "";
+        const password = document.getElementById("roomPassword").value.trim();
+
+        card.innerHTML = `
+          <div class="client-head">
+            <div>
+              <strong>Cliente ${client.id}</strong>
+              <div class="row">
+                <span class="pill ${connected ? "ok" : "err"}">${connected ? "conectado" : "desconectado"}</span>
+                <span class="pill">socket: ${client.socket?.id || "-"}</span>
+              </div>
+            </div>
+            <div class="row">
+              <button class="good" data-action="connect">Conectar</button>
+              <button class="danger" data-action="disconnect">Desconectar</button>
+            </div>
+          </div>
+          <div class="client-body">
+            <div class="grid">
+              <label>Username<input data-field="username" value="${client.username}" /></label>
+              <label>Avatar URL<input data-field="avatarUrl" value="${client.avatarUrl}" /></label>
+            </div>
+
+            <div class="row">
+              <button data-action="createRoom">Crear sala</button>
+              <button data-action="joinRoom">Unirse por código</button>
+              <button data-action="leaveRoom" class="secondary">Leave</button>
+              <button data-action="startGame" class="good">Start</button>
+            </div>
+
+            <div class="grid">
+              <label>Room ID<input data-field="roomId" value="${roomId}" /></label>
+              <label>Code<input data-field="code" value="${code}" /></label>
+            </div>
+
+            <div class="grid">
+              <label>Kick target<select data-field="kickTarget"><option value="">Seleccionar</option>${buildPlayerOptions(client)}</select></label>
+              <label>Vote target<select data-field="voteTarget"><option value="">Seleccionar</option>${buildPlayerOptions(client, true)}</select></label>
+            </div>
+
+            <div class="row">
+              <input data-field="word" placeholder="Palabra (máx. 20)" value="" />
+              <button data-action="submitWord" class="${isMyTurn ? "good" : "secondary"}">${isMyTurn ? "Enviar palabra (mi turno)" : "Enviar palabra"}</button>
+            </div>
+
+            <div class="row">
+              <input data-field="chat" placeholder="Mensaje chat (debate/voting)" value="" />
+              <button data-action="sendChatMessage">Chat</button>
+              <button data-action="votePlayer" class="secondary">Votar</button>
+              <button data-action="kickPlayer" class="danger">Kick</button>
+            </div>
+
+            <div class="room-box">
+              <div class="row">
+                <span class="pill ${isHost ? "warn" : ""}">${isHost ? "host" : "player"}</span>
+                <span class="pill">phase: ${client.room?.gamePhase || client.phase || "-"}</span>
+                <span class="pill">round: ${client.room?.currentRound || "-"}</span>
+                <span class="pill">turno: ${client.turn?.username || "-"}</span>
+              </div>
+              <div class="players-box">
+                <strong>Players</strong>
+                <div class="players">
+                  ${(client.room?.players || []).map((p) => `
+                    <div class="player">
+                      <span>${p.username}${p.socketId === client.socket?.id ? " (yo)" : ""}</span>
+                      <span>${p.isHost ? "host" : ""} ${p.isAlive ? "alive" : "dead"} ${p.isOnline ? "online" : "offline"}</span>
+                    </div>
+                  `).join("") || "<p>Sin jugadores</p>"}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid">
+              <div class="room-box">
+                <strong>Character assigned</strong>
+                <pre>${client.character ? pretty(client.character) : "-"}</pre>
+              </div>
+              <div class="room-box">
+                <strong>Votes / Hints</strong>
+                <pre>${pretty({ votes: client.votes || {}, hints: client.hints || [] })}</pre>
+              </div>
+            </div>
+
+            <div class="log-box" data-role="log"></div>
+          </div>
+        `;
+
+        client.logEl = card.querySelector('[data-role="log"]');
+        client.logEl.innerHTML = (client.logs || [])
+          .map((entry) => `<div class="event ${entry.type}">${escapeHtml(entry.text)}</div>`)
+          .join("");
+        if (append) addLog(client, "", "cliente creado");
+
+        card.querySelectorAll("[data-field]").forEach((el) => {
+          if (el.dataset.field === "username") el.addEventListener("input", () => (client.username = el.value));
+          if (el.dataset.field === "avatarUrl") el.addEventListener("input", () => (client.avatarUrl = el.value));
         });
+
+        card.querySelectorAll("[data-action]").forEach((button) => {
+          button.addEventListener("click", () => handleAction(client, button.dataset.action, card));
+        });
+      }
+
+      function field(card, name) {
+        return card.querySelector(`[data-field="${name}"]`)?.value?.trim() || "";
+      }
+
+      function handleAction(client, action, card) {
+        if (action === "connect") return connectClient(client);
+        if (action === "disconnect") return disconnectClient(client);
+
+        const roomId = field(card, "roomId") || client.room?.id || state.lastRoom?.id;
+        const code = Number(field(card, "code") || client.room?.code || state.lastRoom?.code);
+
+        if (action === "createRoom") {
+          const settings = getSettings();
+          if (!settings.category) return addLog(client, "err", "Falta Category ID");
+          return emitWithAck(client, "createRoom", {
+            username: client.username,
+            avatarUrl: client.avatarUrl,
+            settings,
+          });
+        }
+
+        if (action === "joinRoom") {
+          if (!code) return addLog(client, "err", "Falta code para joinRoom");
+          return emitWithAck(client, "joinRoom", {
+            code,
+            username: client.username,
+            avatarUrl: client.avatarUrl,
+            isGuest: true,
+            password: document.getElementById("roomPassword").value.trim() || undefined,
+          });
+        }
+
+        if (!roomId) return addLog(client, "err", `Falta roomId para ${action}`);
+
+        if (action === "leaveRoom") return emitWithAck(client, "leaveRoom", { roomId });
+        if (action === "startGame") return emitWithAck(client, "startGame", { roomId });
+        if (action === "submitWord") return emitWithAck(client, "submitWord", { roomId, word: field(card, "word") });
+        if (action === "sendChatMessage") return emitWithAck(client, "sendChatMessage", { roomId, message: field(card, "chat") });
+        if (action === "votePlayer") return emitWithAck(client, "votePlayer", { roomId, targetId: field(card, "voteTarget") });
+        if (action === "kickPlayer") return emitWithAck(client, "kickPlayer", { roomId, targetId: field(card, "kickTarget") });
+      }
+
+      document.getElementById("addClientBtn").addEventListener("click", createClient);
+      document.getElementById("addThreeBtn").addEventListener("click", () => {
+        createClient();
+        createClient();
+        createClient();
       });
+      document.getElementById("connectAllBtn").addEventListener("click", () => state.clients.forEach(connectClient));
+      document.getElementById("disconnectAllBtn").addEventListener("click", () => state.clients.forEach(disconnectClient));
 
-      /** Unirse a sala existente */
-      document.getElementById("joinRoomBtn").addEventListener("click", () => {
-        const pin = Number(prompt("Ingresa el PIN de la sala:"));
-        if (!pin) return;
-
-        const username = prompt("Ahora ingresa tu nombre:");
-        if (!username) return;
-
-        socket.emit("joinRoom", { gamePin: pin, username }, (res) => {
-          if (!res.success) {
-            alert(`❌ Error: ${res.message}`);
+      async function loadCategories() {
+        const sel = document.getElementById("category");
+        try {
+          const res = await fetch("/api/category");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const categories = await res.json();
+          sel.innerHTML = "";
+          if (categories.length === 0) {
+            sel.innerHTML = '<option value="">No hay categorías</option>';
             return;
           }
-          currentRoomPin = pin;
-          console.log(`✅ Te uniste a la sala con PIN ${pin}`);
-        });
-      });
-
-      /** Iniciar juego (solo host) */
-      startGameBtn.addEventListener("click", () => {
-        if (!currentRoomPin) return alert("Primero debes estar en una sala");
-        socket.emit("startGame", { gamePin: currentRoomPin }, (res) => {
-          if (!res.success) return alert(`❌ Error: ${res.message}`);
-          console.log("Juego iniciado!");
-        });
-      });
-
-      /** Escucha cuando un nuevo jugador se une */
-      socket.on("playerJoined", (data) => {
-        console.log(`👤 ${data.username} se unió a la sala`);
-      });
-
-      /** Escucha la lista actualizada de jugadores */
-      socket.on("updatePlayers", (data) => {
-        updatePlayersList(data.players, data.hostId);
-      });
-
-      /** Escucha cuando el juego empieza */
-      socket.on("gameStarted", (data) => {
-        console.log("🎮 Juego iniciado!");
-        console.log("Categoría de la partida:", data.categoryId);
-
-        data.players.forEach((p) => {
-          console.log(`Jugador: ${p.username}`);
-          console.log(`Impostor?: ${p.isImpostor}`);
-          if (!p.isImpostor) {
-            console.log("Personaje visible:", p.character); // objeto completo
-          } else {
-            console.log("Personaje invisible para impostor");
+          sel.innerHTML = '<option value="">Seleccionar...</option>';
+          for (const cat of categories) {
+            const opt = document.createElement("option");
+            opt.value = cat.id;
+            opt.textContent = cat.name;
+            sel.appendChild(opt);
           }
-        });
+        } catch (err) {
+          sel.innerHTML = `<option value="">Error: ${err.message}</option>`;
+        }
+      }
 
-        alert(
-          "El juego ha comenzado! Revisa la consola para ver los personajes y quién es el impostor."
-        );
-      });
+      loadCategories();
+      createClient();
     </script>
   </body>
 </html>

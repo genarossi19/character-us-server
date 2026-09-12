@@ -1,84 +1,65 @@
 # Arquitectura Actual
 
-Este documento describe el codigo ejecutable actual. Los diagramas Mermaid de la raiz y los tipos `User`, `Game` y `PlayerGame` representan una direccion anterior o futura, no modelos conectados al servidor.
+## Limites del sistema
 
-## Limites Del Sistema
+| Area | Implementacion activa |
+| --- | --- |
+| Entrypoint | `src/index.ts`: Express, HTTP server y Socket.IO. |
+| API HTTP | `src/api/`: auth, categorias, personajes y estadisticas. |
+| Juego en tiempo real | `src/sockets/handlers/` y `src/sockets/services/`. |
+| Estado de salas | Memoria del proceso en `room.service.ts`. |
+| Reglas | `src/game/stateMachine.ts` y `src/game/winConditions.ts`. |
+| Persistencia | Sequelize sobre PostgreSQL/Supabase. |
+| Administracion | AdminJS bajo `/admin`. |
 
-| Area | Fuente principal | Estado |
-| --- | --- | --- |
-| Composicion del servidor | `src/index.ts` | Un proceso comparte el mismo servidor HTTP entre Express y Socket.IO. |
-| Lobby y comienzo de partida | `src/sockets/rooms.ts` | Estado en memoria por proceso. |
-| Catalogo | `src/api/services/category/`, `src/api/services/character/` | CRUD Sequelize sobre PostgreSQL. |
-| Administracion | `src/admin/` | AdminJS autenticado para Category y Character. |
-| Configuracion de BD | `src/db/sequelize.ts` | Una instancia Sequelize, URL de entorno y SSL obligatorio. |
-| Cliente de prueba | `client/index.html` | Harness legado; no representa por completo el contrato activo. |
+`src/sockets/game.ts` es codigo historico no registrado por `src/index.ts`; no forma parte del runtime activo.
 
-`src/sockets/game.ts` declara sus propios mapas de salas y eventos, pero nadie importa su `registerSocketHandlers`. Modificarlo no cambia el servidor.
+## Inicio
 
-## Flujo De Ejecucion
+1. `src/index.ts` crea Express y el servidor HTTP.
+2. Registra rutas HTTP bajo `/api` y AdminJS bajo `/admin`.
+3. Socket.IO se monta sobre el mismo servidor, con `websocket` como unico transporte.
+4. El proceso escucha en `0.0.0.0` y `PORT` (3000 por defecto).
 
-1. Los imports de modelos crean la instancia Sequelize y exigen `DB_CONNECTION_STRING`.
-2. `src/index.ts` crea Express, configura CORS/JSON y construye un servidor HTTP.
-3. Socket.IO usa ese servidor, fuerza `websocket` y registra `rooms.ts`.
-4. Express monta `/admin`, `/api/category` y `/api/character`.
-5. El proceso escucha en `PORT` o `3000`. No autentica la BD ni sincroniza el esquema durante el arranque.
+## Estado y persistencia
 
-Morgan se monta despues de las rutas, por lo que las solicitudes resueltas por esas rutas no pasan por el logger.
+Las salas no se persisten. `RoomState` contiene jugadores, host, PIN, fase, turnos, votos, roles y chat. Todo ese estado se pierde al reiniciar el proceso.
 
-## Estado Y Persistencia
+PostgreSQL conserva:
 
-PostgreSQL contiene dos modelos activos:
+- `users`: `id`, `username`, `email`, `password_hash`, estadisticas y timestamps. No almacena avatar, nombre ni apellido.
+- `category`: catalogo de categorias.
+- `character`: personajes con `image` de tipo `TEXT` y `category_id`.
+- `game_history`: resumen final de partida. `winner` solo admite `innocent` o `impostor`.
+- `game_players`: participacion individual. `user_id` puede ser nulo para invitados.
 
-- `category`: UUID, nombre, descripcion y estado `active | inactive`.
-- `character`: UUID, nombre, descripcion, imagen y `category_id`; pertenece a Category.
+El avatar es un dato de `PlayerState` y solo existe dentro de una partida/sala.
 
-El modulo `rooms.ts` conserva dos objetos a nivel de proceso:
+## Identidad y autorizacion
 
-- `rooms[internalId]`: host, PIN, categoria, jugadores y bandera `gameStarted`.
-- `pinMap[gamePin]`: traduccion del PIN publico al UUID interno.
+- Registro y login devuelven un JWT de acceso de una hora y el perfil público con estadísticas.
+- El token se firma con `HS256` y valida emisor, audiencia, expiración y sujeto. No contiene secretos ni `password_hash`.
+- `GET /api/auth/me` consulta Supabase para devolver el perfil actualizado de una sesión Bearer válida.
+- `createRoom` verifica el token entregado en su payload, asigna su `userId` al host y exige que el `username` coincida con la sesión.
+- Unirse a una sala permite invitados y usuarios registrados; `userId` es opcional en `joinRoom`.
+- Las mutaciones REST de catalogo requieren el JWT del email administrador configurado.
 
-No existe una capa de repositorio para salas ni adaptador compartido. Esto implica que un reinicio pierde todo el juego y que dos replicas del servidor no compartirian salas sin sticky sessions y un almacen externo.
+## Fases del juego
 
-## Secuencia Del Juego
-
-```mermaid
-sequenceDiagram
-    participant H as Host
-    participant S as Socket.IO server
-    participant P as Player
-    participant DB as PostgreSQL
-
-    H->>S: createRoom { username, categoryId }
-    S-->>H: ack { internalId, gamePin }
-    P->>S: joinRoom { gamePin, username }
-    S-->>H: updatePlayers
-    S-->>P: updatePlayers
-    H->>S: startGame { gamePin }
-    S->>DB: findAll characters by category_id
-    DB-->>S: characters
-    S-->>H: gameStarted (private payload)
-    S-->>P: gameStarted (private payload)
+```text
+waiting -> character -> word -> debate -> voting -> results
 ```
 
-Al iniciar:
+- `character`: asignacion privada. El impostor recibe `character: null`.
+- `word`: turnos individuales; cada jugador tiene hasta 60 segundos.
+- `debate`: 40 segundos, con chat y posibilidad de adelantar mediante `debateReady` de todos los jugadores vivos.
+- `voting`: 40 segundos, un voto definitivo por jugador.
+- `results`: 5 segundos. La partida sigue o finaliza segun `winConditions`.
 
-- Solo se acepta el `socket.id` guardado como host.
-- Se bloquea una segunda llamada mediante `gameStarted`.
-- Se elige un personaje de la categoria con `Math.random()`.
-- Se elige exactamente un indice de jugador como impostor.
-- Cada jugador recibe un `gameStarted` privado. El personaje o cualquier identificador que permita resolverlo nunca debe emitirse a toda la sala porque eso lo revelaria al impostor.
+El ganador interno, emitido al cliente y persistido es `innocent` o `impostor`.
 
-La separacion actual es incompleta: los mismos objetos `PlayerData` almacenan datos publicos y secretos. Un `updatePlayers` posterior al inicio puede difundir `isImpostor` y `characterId`; este defecto no forma parte del contrato deseado.
+## Contratos publicos
 
-## Desconexion
+`RoomPublic` y `PlayerPublic` no incluyen `characterId`, `isImpostor` ni `isJoker`. Las asignaciones de personaje se emiten individualmente con `characterAssigned` para preservar el secreto del rol.
 
-El handler busca la primera sala que contenga el `socket.id`, elimina al jugador y emite `updatePlayers`. Si era host, asigna al primer jugador restante como nuevo host; si no queda nadie, elimina `rooms[internalId]`.
-
-Hay defectos conocidos en este orden y limpieza, descritos en `TECHNICAL_DEBT.md`: la emision ocurre antes de transferir el host, puede incluir datos secretos del juego, solo se limpia la primera membresia y no se elimina la entrada correspondiente de `pinMap`.
-
-## Contratos Que Cruzan Capas
-
-- El frontend envia `categoryId`, pero Sequelize consulta `category_id`.
-- `gamePin` es un numero de seis digitos; `internalId` es el nombre UUID de la sala Socket.IO y no deberia sustituirse por el PIN sin revisar colisiones y exposicion.
-- La identidad actual es la conexion (`socket.id`), no un usuario persistente. Reconectar crea otra identidad.
-- AdminJS y REST comparten modelos, pero solo AdminJS esta detras del login de administrador.
+La especificacion HTTP y Socket.IO completa se mantiene en [`../frontend.md`](../frontend.md).

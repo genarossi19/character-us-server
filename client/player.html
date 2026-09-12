@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CharacterUs Player</title>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --ink: #172033;
+        --muted: #6d7482;
+        --card: #fffaf1;
+        --card-strong: #fff2d6;
+        --line: #eadcc3;
+        --accent: #ef6f4d;
+        --accent-2: #274c77;
+        --good: #219653;
+        --bad: #c0392b;
+        --warn: #d99000;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 12%, rgba(239, 111, 77, 0.20), transparent 28%),
+          radial-gradient(circle at 85% 0%, rgba(39, 76, 119, 0.16), transparent 34%),
+          var(--bg);
+        font-family: ui-rounded, "SF Pro Rounded", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 18px clamp(16px, 4vw, 42px);
+      }
+
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: clamp(26px, 4vw, 42px); letter-spacing: -0.04em; }
+      h2 { font-size: 22px; letter-spacing: -0.03em; }
+      h3 { font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+      main {
+        width: min(1280px, calc(100% - 28px));
+        margin: 0 auto 28px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 18px;
+      }
+
+      .card {
+        background: rgba(255, 250, 241, 0.88);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: 0 18px 70px rgba(39, 76, 119, 0.12);
+        padding: 20px;
+        backdrop-filter: blur(14px);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .room-code {
+        font-size: clamp(36px, 6vw, 64px);
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        color: var(--accent-2);
+        word-break: break-all;
+      }
+
+      .muted { color: var(--muted); }
+      .stack { display: grid; gap: 12px; }
+      .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      input, select, textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: #fffdf8;
+        color: var(--ink);
+        padding: 12px 13px;
+        font: inherit;
+        outline: none;
+      }
+
+      textarea { resize: vertical; min-height: 78px; }
+
+      button {
+        border: 0;
+        border-radius: 15px;
+        padding: 12px 15px;
+        color: white;
+        background: var(--accent);
+        font-weight: 900;
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease;
+      }
+
+      button:hover { transform: translateY(-1px); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+      button.secondary { background: var(--accent-2); }
+      button.ghost { background: #efe0c9; color: var(--ink); }
+      button.danger { background: var(--bad); }
+      button.good { background: var(--good); }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        background: #fffdf8;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .pill.good { color: var(--good); }
+      .pill.bad { color: var(--bad); }
+      .pill.warn { color: var(--warn); }
+      .phase {
+        display: inline-block;
+        padding: 10px 13px;
+        border-radius: 14px;
+        background: var(--card-strong);
+        color: var(--accent-2);
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .players {
+        display: grid;
+        gap: 10px;
+      }
+
+      .player {
+        display: grid;
+        grid-template-columns: 40px 1fr auto;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fffdf8;
+      }
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        color: white;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      }
+
+      .timeline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .step {
+        text-align: center;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: #fffdf8;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        flex: 1 1 auto;
+        min-width: 70px;
+      }
+
+      .step.active { background: var(--accent-2); color: white; }
+
+      .notice {
+        padding: 12px;
+        border-radius: 16px;
+        background: #fff2d6;
+        border: 1px solid #f2c98f;
+        color: #6a4400;
+        font-weight: 800;
+      }
+
+      .chat {
+        height: 210px;
+        overflow: auto;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        padding: 10px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: #fffdf8;
+      }
+
+      .msg {
+        padding: 9px 11px;
+        border-radius: 13px;
+        background: #f3eadb;
+        font-size: 14px;
+      }
+
+      .msg.system { background: #dfeaff; color: #1b3f6d; }
+      .msg.ghost { background: #eee; color: #555; }
+      .msg.word { background: #e6f9e6; color: #1a5c2a; border-left: 3px solid #219653; }
+      .msg.word.skip { background: #fff3e0; color: #7a4a00; border-left: 3px solid #d99000; }
+      .msg.vote { background: #fff8e1; color: #6a4400; border-left: 3px solid #f9a825; }
+      .msg.elimination { background: #fde8e8; color: #7a1a1a; border-left: 3px solid #c0392b; }
+      .msg.game-result { background: #e8eaf6; color: #1a237e; border-left: 3px solid #3f51b5; font-weight: 800; }
+
+      .toast-area {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        display: grid;
+        gap: 8px;
+        z-index: 20;
+      }
+
+      .toast {
+        padding: 12px 14px;
+        border-radius: 15px;
+        background: #172033;
+        color: white;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+        max-width: 340px;
+      }
+
+      .toast.error { background: var(--bad); }
+      .toast.good { background: var(--good); }
+
+      .hidden { display: none !important; }
+
+      @media (max-width: 920px) {
+        .shell { grid-template-columns: 1fr; }
+        .hero { grid-template-columns: 1fr; }
+        header { align-items: flex-start; flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>CharacterUs</h1>
+        <p class="muted">Vista player: simple, limpia y cercana a lo que vería un usuario real.</p>
+      </div>
+      <div class="row">
+        <span id="connectionPill" class="pill bad">Desconectado</span>
+        <button id="connectBtn" class="secondary">Conectar</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="lobbyCard" class="hero">
+        <div class="card stack">
+          <h2>Entrar a una sala</h2>
+          <label>
+            Tu nombre
+            <input id="username" value="Player" maxlength="30" />
+          </label>
+          <label>
+            Avatar simple
+            <select id="avatarUrl">
+              <option value="/avatars/astronaut.webp">Astronauta</option>
+              <option value="/avatars/pirata.webp">Pirata</option>
+              <option value="/avatars/detective.webp">Detective</option>
+              <option value="/avatars/chef.webp">Chef</option>
+              <option value="/avatars/medico.webp">Médico</option>
+            </select>
+          </label>
+
+          <div class="grid">
+            <label>
+              Código de sala
+              <input id="joinCode" inputmode="numeric" placeholder="123456" />
+            </label>
+            <label>
+              Password opcional
+              <input id="joinPassword" placeholder="si tiene" />
+            </label>
+          </div>
+          <button id="joinBtn">Unirme con código</button>
+        </div>
+
+        <div class="card stack">
+          <h2>Crear sala</h2>
+          <label>
+            JWT de sesión
+            <input id="authToken" type="password" placeholder="Obtenido desde /api/auth/login" />
+          </label>
+          <label>
+            Categoría
+            <select id="category"><option value="">Cargando categorías...</option></select>
+          </label>
+          <div class="grid">
+            <label>
+              Jugadores máx.
+              <select id="maxPlayers">
+                <option value="4">4</option>
+                <option value="6" selected>6</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label>
+              Rondas
+              <select id="totalRounds">
+                <option value="3">3</option>
+                <option value="5">5</option>
+                <option value="7">7</option>
+                <option value="10">10</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid">
+            <label>
+              Impostores
+              <select id="impostorCount">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </label>
+            <label>
+              Privacidad
+              <select id="privacy">
+                <option value="private">Privada</option>
+                <option value="public">Pública</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid">
+            <label>
+              Modo
+              <select id="mode">
+                <option value="classic">Classic</option>
+                <option value="anonymous">Anonymous</option>
+                <option value="special">Special</option>
+              </select>
+            </label>
+            <label>
+              Impostores se conocen
+              <select id="impostorsKnowEachOther">
+                <option value="true">Sí</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Votos visibles
+            <select id="visibleVotes">
+              <option value="true">Sí</option>
+              <option value="false">No</option>
+            </select>
+          </label>
+          <label>
+            Password opcional
+            <input id="roomPassword" placeholder="vacío = sin password" />
+          </label>
+          <button id="createBtn" class="good">Crear sala</button>
+        </div>
+      </section>
+
+      <section id="gameView" class="hidden shell">
+        <aside class="card stack">
+          <div>
+            <h3>Código de sala</h3>
+            <div id="roomCode" class="room-code">------</div>
+            <p class="muted">Compártelo con otros jugadores</p>
+          </div>
+
+          <div class="row">
+            <span id="phasePill" class="phase">waiting</span>
+            <span id="roundPill" class="pill">Ronda -</span>
+          </div>
+
+          <div class="stack">
+            <h3>Estado de jugadores</h3>
+            <div id="playersStatus" class="notice">Todavía no estás en una sala.</div>
+          </div>
+
+          <div class="stack">
+            <h3>Personaje</h3>
+            <div id="characterBox" class="notice">Aún no asignado.</div>
+          </div>
+
+          <div class="row">
+            <button id="startBtn" class="good">Iniciar partida</button>
+            <button id="leaveBtn" class="ghost">Salir</button>
+          </div>
+        </aside>
+
+        <section class="stack">
+          <div class="card stack">
+            <div class="row" style="justify-content: space-between">
+              <div>
+                <h2 id="roomTitle">Sala</h2>
+                <p id="roomSubtitle" class="muted">Esperando jugadores...</p>
+              </div>
+              <span id="hostPill" class="pill warn">Host: -</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+          </div>
+
+          <div class="grid">
+            <div class="card stack">
+              <h2>Jugadores</h2>
+              <div id="playersList" class="players"></div>
+            </div>
+
+            <div class="card stack">
+              <h2>Acciones de ronda</h2>
+              <div id="turnNotice" class="notice">Esperando inicio de partida.</div>
+              <div id="turnTimer" class="muted" style="display:none">Tiempo restante: <span id="turnTimerValue">60</span>s</div>
+              <label>
+                Tu palabra
+                <input id="wordInput" maxlength="20" placeholder="1 palabra" />
+              </label>
+              <button id="submitWordBtn" class="secondary">Enviar palabra</button>
+
+              <div id="debateReadySection" style="display:none">
+                <div id="debateReadyNotice" class="notice">Listo para votar</div>
+                <button id="debateReadyBtn" class="good">Marcar listo</button>
+              </div>
+
+              <label id="voteLabel">
+                Votar jugador
+                <select id="voteTarget"></select>
+              </label>
+              <button id="voteBtn" class="danger">Votar</button>
+            </div>
+          </div>
+
+          <div class="card stack">
+            <h2>Chat</h2>
+            <div id="chatBox" class="chat"></div>
+            <div class="row">
+              <input id="chatInput" maxlength="500" placeholder="Mensaje para debate o votación" />
+              <button id="chatBtn">Enviar</button>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toasts" class="toast-area"></div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+      const phases = ["waiting", "character", "word", "debate", "voting", "results"];
+      const state = {
+        socket: null,
+        room: null,
+        character: null,
+        turn: null,
+        hints: [],
+        words: {},
+        votes: {},
+        messages: [],
+        result: null,
+        debateReady: { readyPlayers: [], total: 0 },
+        turnTimerInterval: null,
+        turnTimerValue: 60,
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function toast(message, type = "") {
+        const el = document.createElement("div");
+        el.className = `toast ${type}`;
+        el.textContent = message;
+        $("toasts").appendChild(el);
+        setTimeout(() => el.remove(), 3600);
+      }
+
+      function username() {
+        return $("username").value.trim() || "Player";
+      }
+
+      function addChatMsg(senderName, message, type = "system") {
+        state.messages.push({
+          id: crypto.randomUUID(),
+          senderId: "local",
+          senderName,
+          message,
+          type,
+          timestamp: Date.now(),
+        });
+        state.messages = state.messages.slice(-80);
+        renderChat();
+      }
+
+      function connect() {
+        if (state.socket?.connected) return;
+        state.socket = io(window.location.origin, {
+          transports: ["websocket"],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          reconnectionAttempts: Infinity,
+        });
+
+        const socket = state.socket;
+        socket.on("connect", () => {
+          toast("Conectado", "good");
+          render();
+        });
+        socket.on("disconnect", (reason) => {
+          toast(`Desconectado: ${reason}`, "error");
+          render();
+        });
+        socket.on("connect_error", (err) => toast(`Error de conexión: ${err.message}`, "error"));
+
+        socket.on("roomUpdated", (room) => {
+          state.room = room;
+          render();
+        });
+        socket.on("playerJoined", (player) => toast(`${player.username} se unió`, "good"));
+        socket.on("playerLeft", () => toast("Un jugador salió"));
+        socket.on("playerKicked", (playerId) => {
+          if (playerId === socket.id) {
+            state.room = null;
+            toast("Fuiste expulsado", "error");
+          }
+          render();
+        });
+        socket.on("roomClosed", ({ reason }) => {
+          state.room = null;
+          state.character = null;
+          toast(`Sala cerrada: ${reason}`, "error");
+          render();
+        });
+        socket.on("gameStarted", ({ room }) => {
+          state.room = room;
+          state.messages = [];
+          state.words = {};
+          state.votes = {};
+          state.votesTargetMap = {};
+          state.hints = [];
+          toast("Partida iniciada", "good");
+          render();
+        });
+        socket.on("characterAssigned", (data) => {
+          state.character = data;
+          state.words = {};
+          state.votes = {};
+          state.votesTargetMap = {};
+          state.hints = [];
+          render();
+        });
+        socket.on("phaseChanged", ({ phase }) => {
+          if (state.room) state.room.gamePhase = phase;
+          addChatMsg("Sistema", `Fase: ${phase}`, "system");
+          if (phase !== "word") {
+            state.turn = null;
+            clearTurnTimerInterval();
+          }
+          if (phase === "debate") {
+            state.debateReady = { readyPlayers: [], total: 0 };
+          }
+          render();
+        });
+        socket.on("turnChanged", (turn) => {
+          state.turn = turn;
+          startTurnTimer();
+          render();
+        });
+        socket.on("wordHintRevealed", ({ playerId, username, word, skipped }) => {
+          state.words[playerId] = word;
+          if (skipped) {
+            addChatMsg(username, 'no contestó — "Sin palabra"', "word skip");
+          } else {
+            addChatMsg(username, `dijo "${word}"`, "word");
+          }
+          renderPlayersStatus();
+        });
+        socket.on("allWordsSubmitted", ({ hints }) => {
+          state.hints = hints;
+          state.turn = null;
+          clearTurnTimerInterval();
+          addChatMsg("Sistema", "Todas las pistas fueron reveladas", "system");
+          render();
+        });
+        socket.on("debateReadyUpdate", (data) => {
+          state.debateReady = data;
+          render();
+        });
+        socket.on("voteUpdate", ({ votes, voterId, targetId, visible }) => {
+          state.votes = votes;
+          state.votesTargetMap = state.votesTargetMap || {};
+          if (visible && targetId) {
+            state.votesTargetMap[voterId] = targetId;
+          }
+          renderPlayersStatus();
+          render();
+        });
+        socket.on("playerEliminated", ({ player, wasImpostor }) => {
+          addChatMsg(
+            "Sistema",
+            wasImpostor
+              ? `${player.username} fue eliminado y era el impostor`
+              : `${player.username} fue eliminado`,
+            "elimination"
+          );
+        });
+        socket.on("roundResults", (result) => {
+          if (!result.eliminatedPlayer) {
+            addChatMsg("Sistema", "Empate: nadie eliminado", "system");
+          }
+          render();
+        });
+        socket.on("gameEnded", (result) => {
+          state.result = result;
+          if (state.room) {
+            state.room.status = "waiting";
+            state.room.gamePhase = "waiting";
+            state.room.currentRound = 0;
+          }
+          addChatMsg(
+            "Sistema",
+            result.winner === "innocent"
+              ? "Juego terminado. Ganó la tripulación"
+              : "Juego terminado. Ganó el impostor",
+            "game-result"
+          );
+          render();
+        });
+        socket.on("chatMessage", (message) => {
+          state.messages.push(message);
+          state.messages = state.messages.slice(-80);
+          renderChat();
+        });
+      }
+
+      function startTurnTimer() {
+        clearTurnTimerInterval();
+        state.turnTimerValue = 60;
+        $("turnTimerValue").textContent = "60";
+        $("turnTimer").style.display = "block";
+        state.turnTimerInterval = setInterval(() => {
+          state.turnTimerValue--;
+          $("turnTimerValue").textContent = String(state.turnTimerValue);
+          if (state.turnTimerValue <= 0) {
+            clearTurnTimerInterval();
+          }
+        }, 1000);
+      }
+
+      function clearTurnTimerInterval() {
+        if (state.turnTimerInterval) {
+          clearInterval(state.turnTimerInterval);
+          state.turnTimerInterval = null;
+        }
+        $("turnTimer").style.display = "none";
+      }
+
+      function setDebateReady() {
+        if (!state.room) return;
+        emit("debateReady", { roomId: state.room.id }, () => {
+          toast("Marcado como listo", "good");
+        });
+      }
+
+      function settings() {
+        const password = $("roomPassword").value.trim();
+        return {
+          category: $("category").value.trim(),
+          impostorCount: Number($("impostorCount").value),
+          totalRounds: Number($("totalRounds").value),
+          maxPlayers: Number($("maxPlayers").value),
+          privacy: $("privacy").value,
+          mode: $("mode").value,
+          impostorsKnowEachOther: $("impostorsKnowEachOther").value === "true",
+          visibleVotes: $("visibleVotes").value === "true",
+          ...(password ? { password } : {}),
+        };
+      }
+
+      function emit(eventName, payload, onOk) {
+        connect();
+        if (!state.socket?.connected) {
+          toast("Conectando socket, intenta otra vez en un segundo", "error");
+          return;
+        }
+        state.socket.emit(eventName, payload, (res) => {
+          if (!res || res.success === false) {
+            toast(res?.message || `Error en ${eventName}`, "error");
+            return;
+          }
+          if (res.data?.room) state.room = res.data.room;
+          toast("Acción realizada", "good");
+          onOk?.(res);
+          render();
+        });
+      }
+
+      function createRoom() {
+        const roomSettings = settings();
+        if (!roomSettings.category) return toast("Category ID requerido", "error");
+        const token = $("authToken").value.trim();
+        if (!token) return toast("Inicia sesión y pega tu JWT para crear una sala", "error");
+        emit("createRoom", {
+          username: username(),
+          avatarUrl: $("avatarUrl").value,
+          settings: roomSettings,
+          token,
+        });
+      }
+
+      function joinRoom() {
+        const code = Number($("joinCode").value.trim());
+        if (!code) return toast("Código requerido", "error");
+        emit("joinRoom", {
+          code,
+          username: username(),
+          avatarUrl: $("avatarUrl").value,
+          isGuest: true,
+          password: $("joinPassword").value.trim() || undefined,
+        });
+      }
+
+      function startGame() {
+        if (!state.room) return;
+        emit("startGame", { roomId: state.room.id });
+      }
+
+      function leaveRoom() {
+        if (!state.room) return;
+        emit("leaveRoom", { roomId: state.room.id }, () => {
+          state.room = null;
+          state.character = null;
+          state.turn = null;
+          state.messages = [];
+        });
+      }
+
+      function submitWord() {
+        if (!state.room) return;
+        emit("submitWord", { roomId: state.room.id, word: $("wordInput").value.trim() }, () => {
+          $("wordInput").value = "";
+        });
+      }
+
+      function vote() {
+        if (!state.room) return;
+        emit("votePlayer", { roomId: state.room.id, targetId: $("voteTarget").value });
+      }
+
+      function sendChat() {
+        if (!state.room) return;
+        emit("sendChatMessage", { roomId: state.room.id, message: $("chatInput").value.trim() }, () => {
+          $("chatInput").value = "";
+        });
+      }
+
+      function kick(playerId) {
+        if (!state.room) return;
+        emit("kickPlayer", { roomId: state.room.id, targetId: playerId });
+      }
+
+      function me() {
+        return state.room?.players?.find((p) => p.socketId === state.socket?.id) || null;
+      }
+
+      function host() {
+        return state.room?.players?.find((p) => p.socketId === state.room?.hostId) || null;
+      }
+
+      function render() {
+        const connected = !!state.socket?.connected;
+        $("connectionPill").className = `pill ${connected ? "good" : "bad"}`;
+        $("connectionPill").textContent = connected ? `Conectado: ${state.socket.id}` : "Desconectado";
+        $("connectBtn").textContent = connected ? "Reconectar" : "Conectar";
+
+        const inRoom = !!state.room;
+        $("lobbyCard").classList.toggle("hidden", inRoom);
+        $("gameView").classList.toggle("hidden", !inRoom);
+        if (!inRoom) return;
+
+        const currentMe = me();
+        const currentHost = host();
+        const phase = state.room.gamePhase || "waiting";
+        const isHost = currentMe?.isHost;
+        const isMyTurn = state.turn?.playerId === state.socket?.id;
+
+        $("roomCode").textContent = state.room.code;
+        $("phasePill").textContent = phase;
+        $("roundPill").textContent = `Ronda ${state.room.currentRound || "-"}`;
+        $("roomTitle").textContent = state.room.name || "Sala";
+        $("roomSubtitle").textContent = `${state.room.players.length}/${state.room.settings.maxPlayers} jugadores - ${state.room.settings.mode} - ${state.room.settings.privacy}`;
+        $("hostPill").textContent = `Host: ${currentHost?.username || "-"}`;
+
+        renderPlayersStatus();
+
+        $("characterBox").innerHTML = state.character
+          ? state.character.isImpostor
+            ? `<strong>Eres impostor</strong><br><span class="muted">No conoces al personaje</span>`
+            : `<strong>Eres tripulante</strong><br>${state.character.character?.name || "?"}<br><span class="muted">${state.character.character?.category || ""}</span>`
+          : "Aún no asignado.";
+
+        $("startBtn").disabled = !isHost || state.room.status !== "waiting";
+        $("submitWordBtn").disabled = phase !== "word" || !isMyTurn;
+        $("voteBtn").disabled = phase !== "voting" || (currentMe && currentMe.hasVoted);
+        $("chatBtn").disabled = !(phase === "debate" || phase === "voting");
+
+        const showDebateReady = phase === "debate" && currentMe?.isAlive;
+        $("debateReadySection").style.display = showDebateReady ? "block" : "none";
+        if (showDebateReady) {
+          const isReady = state.debateReady.readyPlayers.includes(state.socket?.id);
+          $("debateReadyBtn").disabled = isReady;
+          $("debateReadyBtn").textContent = isReady ? "Listo ✓" : "Marcar listo";
+          $("debateReadyNotice").textContent = `Listos: ${state.debateReady.readyPlayers.length}/${state.debateReady.total}`;
+        }
+
+        const showWordInput = phase === "word" && currentMe?.isAlive;
+        $("wordInput").parentElement.style.display = showWordInput ? "block" : "none";
+        $("submitWordBtn").style.display = showWordInput ? "block" : "none";
+
+        const showVote = phase === "voting" && currentMe?.isAlive && !currentMe?.hasVoted;
+        $("voteLabel").style.display = showVote ? "block" : "none";
+        $("voteBtn").style.display = showVote ? "block" : "none";
+
+        renderTimeline(phase);
+        renderPlayers(isHost);
+        renderVoteOptions();
+        renderTurnNotice(isMyTurn);
+        renderChat();
+      }
+
+      function renderTimeline(activePhase) {
+        $("timeline").innerHTML = phases.map((phase) => `<div class="step ${phase === activePhase ? "active" : ""}">${phase}</div>`).join("");
+      }
+
+      function renderPlayers(canKick) {
+        const currentSocketId = state.socket?.id;
+        $("playersList").innerHTML = state.room.players.map((player) => `
+          <div class="player">
+            <div class="avatar">${player.username.slice(0, 1).toUpperCase()}</div>
+            <div>
+              <strong>${player.username}${player.socketId === currentSocketId ? " (yo)" : ""}</strong>
+              <p class="muted">${player.isHost ? "Host" : "Jugador"} - ${player.isAlive ? "Vivo" : "Fantasma"} - ${player.isOnline ? "Online" : "Offline"}</p>
+            </div>
+            ${canKick && !player.isHost ? `<button class="danger" data-kick="${player.socketId}">Kick</button>` : `<span class="pill ${player.isOnline ? "good" : "bad"}">${player.isOnline ? "online" : "offline"}</span>`}
+          </div>
+        `).join("");
+
+        document.querySelectorAll("[data-kick]").forEach((btn) => {
+          btn.addEventListener("click", () => kick(btn.dataset.kick));
+        });
+      }
+
+      function renderPlayersStatus() {
+        if (!state.room) return;
+        $("playersStatus").innerHTML = state.room.players.map((p) => {
+          const isMe = p.socketId === state.socket?.id;
+          const name = `${p.username}${isMe ? " (yo)" : ""}`;
+          const status = !p.isAlive ? "eliminado" : (p.isOnline ? "online" : "offline");
+          const word = state.words[p.socketId] || "-";
+          const myVote = state.votes?.[p.socketId];
+          const voted = myVote ? "votó" : (p.hasVoted ? "votó" : "sin voto");
+          return `<div class="row" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)">
+            <strong>${name}</strong>
+            <span class="muted">${status} · palabra: ${word} · ${voted}</span>
+          </div>`;
+        }).join("");
+      }
+
+      function renderVoteOptions() {
+        const currentSocketId = state.socket?.id;
+        $("voteTarget").innerHTML = state.room.players
+          .filter((player) => player.isAlive && player.socketId !== currentSocketId)
+          .map((player) => `<option value="${player.socketId}">${player.username}</option>`)
+          .join("");
+      }
+
+      function renderTurnNotice(isMyTurn) {
+        const phase = state.room?.gamePhase || "waiting";
+        const currentMe = me();
+
+        if (phase === "word") {
+          if (!state.turn) {
+            $("turnNotice").textContent = "Esperando turnos.";
+          } else {
+            $("turnNotice").textContent = isMyTurn
+              ? "Es tu turno: escribe una palabra."
+              : `Turno de ${state.turn.username}.`;
+          }
+        } else if (phase === "debate") {
+          $("turnNotice").textContent = "Discutan quién es el impostor.";
+        } else if (phase === "voting") {
+          $("turnNotice").textContent = currentMe?.hasVoted
+            ? "Ya votaste. Esperando a los demás."
+            : "Voten por el jugador que creen que es el impostor.";
+        } else if (phase === "results") {
+          $("turnNotice").textContent = "Resultados de la ronda.";
+        } else {
+          $("turnNotice").textContent = "Esperando inicio de partida.";
+        }
+      }
+
+      function renderChat() {
+        $("chatBox").innerHTML = state.messages.map((msg) => `
+          <div class="msg ${msg.type}">
+            ${msg.type === "system" || msg.type === "word" || msg.type === "word skip" || msg.type === "elimination" || msg.type === "game-result" || msg.type === "vote"
+              ? `<em>${msg.senderName}</em>: ${escapeHtml(msg.message)}`
+              : `<strong>${msg.senderName}</strong>: ${escapeHtml(msg.message)}`
+            }
+          </div>
+        `).join("");
+        $("chatBox").scrollTop = $("chatBox").scrollHeight;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      $("connectBtn").addEventListener("click", connect);
+      $("createBtn").addEventListener("click", createRoom);
+      $("joinBtn").addEventListener("click", joinRoom);
+      $("startBtn").addEventListener("click", startGame);
+      $("leaveBtn").addEventListener("click", leaveRoom);
+      $("submitWordBtn").addEventListener("click", submitWord);
+      $("voteBtn").addEventListener("click", vote);
+      $("chatBtn").addEventListener("click", sendChat);
+      $("debateReadyBtn").addEventListener("click", setDebateReady);
+      $("chatInput").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") sendChat();
+      });
+
+      async function loadCategories() {
+        const sel = $("category");
+        try {
+          const res = await fetch("/api/category");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const categories = await res.json();
+          sel.innerHTML = "";
+          if (categories.length === 0) {
+            sel.innerHTML = '<option value="">No hay categorías</option>';
+            return;
+          }
+          sel.innerHTML = '<option value="">Seleccionar categoría...</option>';
+          for (const cat of categories) {
+            const opt = document.createElement("option");
+            opt.value = cat.id;
+            opt.textContent = cat.name;
+            sel.appendChild(opt);
+          }
+        } catch (err) {
+          sel.innerHTML = `<option value="">Error cargando categorías: ${err.message}</option>`;
+        }
+      }
+
+      loadCategories();
+      connect();
+      render();
+    </script>
+  </body>
+</html>

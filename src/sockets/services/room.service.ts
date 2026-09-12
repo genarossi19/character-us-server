@@ -20,6 +20,47 @@ export function getRoomBySocket(socketId: string): RoomState | undefined {
   return roomId ? rooms.get(roomId) : undefined;
 }
 
+export function forgetSocket(socketId: string): void {
+  socketToRoom.delete(socketId);
+}
+
+export function assignRandomAvatar(room: RoomState): string {
+  const usedAvatars = new Set(
+    Array.from(room.players.values()).map((p) => p.avatarUrl)
+  );
+  const available = GAME_CONFIG.AVATARS.filter((a) => !usedAvatars.has(a.imageUrl));
+  if (available.length === 0) {
+    const all = GAME_CONFIG.AVATARS;
+    return all[Math.floor(Math.random() * all.length)].imageUrl;
+  }
+  return available[Math.floor(Math.random() * available.length)].imageUrl;
+}
+
+export function changeAvatar(
+  roomId: string,
+  socketId: string,
+  avatarId: string
+): { room: RoomState; avatarUrl: string } | { error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: "Sala no encontrada" };
+
+  const player = room.players.get(socketId);
+  if (!player) return { error: "No estás en esta sala" };
+
+  const avatar = GAME_CONFIG.AVATARS.find((a) => a.id === avatarId);
+  if (!avatar) return { error: "Avatar no válido" };
+
+  const occupied = Array.from(room.players.values()).some(
+    (p) => p.socketId !== socketId && p.avatarUrl === avatar.imageUrl
+  );
+  if (occupied) return { error: "Este avatar ya está en uso" };
+
+  const oldAvatar = player.avatarUrl;
+  player.avatarUrl = avatar.imageUrl;
+  console.log(`[changeAvatar] player=${socketId} old=${oldAvatar} new=${avatar.imageUrl} roommates=${room.players.size}`);
+  return { room, avatarUrl: avatar.imageUrl };
+}
+
 export function generateGamePin(): number {
   let pin: number;
   do {
@@ -46,7 +87,7 @@ export function createRoom(
     socketId: hostSocketId,
     userId,
     username,
-    avatarUrl,
+    avatarUrl: "",
     isHost: true,
     isGuest,
     isAlive: true,
@@ -54,6 +95,7 @@ export function createRoom(
     characterId: null,
     isImpostor: false,
     isJoker: false,
+    isDebateReady: false,
     hasSubmittedWord: false,
     word: null,
     hasVoted: false,
@@ -74,6 +116,8 @@ export function createRoom(
     turnOrder: [],
     currentTurnIndex: 0,
     phaseTimer: null,
+    turnTimer: null,
+    debateTimer: null,
     votes: new Map(),
     roundResults: [],
     chatMessages: [],
@@ -82,6 +126,8 @@ export function createRoom(
   rooms.set(roomId, room);
   pinMap.set(code, roomId);
   socketToRoom.set(hostSocketId, roomId);
+
+  host.avatarUrl = assignRandomAvatar(room);
 
   return room;
 }
@@ -125,7 +171,7 @@ export function joinRoom(
     socketId,
     userId,
     username,
-    avatarUrl,
+    avatarUrl: "",
     isHost: false,
     isGuest,
     isAlive: true,
@@ -133,6 +179,7 @@ export function joinRoom(
     characterId: null,
     isImpostor: false,
     isJoker: false,
+    isDebateReady: false,
     hasSubmittedWord: false,
     word: null,
     hasVoted: false,
@@ -142,6 +189,8 @@ export function joinRoom(
 
   room.players.set(socketId, player);
   socketToRoom.set(socketId, room.id);
+
+  player.avatarUrl = assignRandomAvatar(room);
 
   return { room };
 }
@@ -213,6 +262,8 @@ export function getPublicRoom(room: RoomState) {
       isGuest: p.isGuest,
       isAlive: p.isAlive,
       isOnline: p.isOnline,
+      hasVoted: p.hasVoted,
+      isDebateReady: p.isDebateReady,
     })),
     status: room.status,
     gamePhase: room.gamePhase,

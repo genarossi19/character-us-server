@@ -1,11 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import { verifyAccessToken, type AuthUser } from "../../auth/accessToken.ts";
 import { env } from "../../config/env.ts";
 
-export interface AuthPayload {
-  userId: string;
-  email: string;
-}
+export type AuthPayload = AuthUser;
 
 declare global {
   namespace Express {
@@ -15,47 +12,43 @@ declare global {
   }
 }
 
-export function authenticateToken(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ message: "Token de acceso requerido" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(403).json({ message: "Token inválido o expirado" });
-  }
+function getBearerToken(req: Request): string | null {
+  const [scheme, token] = req.headers.authorization?.split(" ") || [];
+  return scheme === "Bearer" && token ? token : null;
 }
 
-export function authenticateAdmin(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(" ")[1];
-
+function getAuthenticatedUser(req: Request, res: Response): AuthPayload | null {
+  const token = getBearerToken(req);
   if (!token) {
-    return res.status(401).json({ message: "Token de acceso requerido" });
+    res.status(401).json({ message: "Inicia sesión para continuar." });
+    return null;
   }
 
-  try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-    if (decoded.email !== env.ADMIN_EMAIL) {
-      return res.status(403).json({ message: "Acceso denegado: no es admin" });
-    }
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(403).json({ message: "Token inválido o expirado" });
+  const user = verifyAccessToken(token);
+  if (!user) {
+    res.status(403).json({ message: "Tu sesión venció o no es válida. Inicia sesión nuevamente." });
+    return null;
   }
+
+  return user;
+}
+
+export function authenticateToken(req: Request, res: Response, next: NextFunction) {
+  const user = getAuthenticatedUser(req, res);
+  if (!user) return;
+
+  req.user = user;
+  next();
+}
+
+export function authenticateAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = getAuthenticatedUser(req, res);
+  if (!user) return;
+
+  if (user.email !== env.ADMIN_EMAIL) {
+    return res.status(403).json({ message: "No tienes permiso para realizar esta acción." });
+  }
+
+  req.user = user;
+  next();
 }

@@ -1,12 +1,11 @@
-import { DataTypes, Model, Optional } from "sequelize";
+import { DataTypes, Model, type Optional } from "sequelize";
 import sequelize from "../sequelize.ts";
 
 export interface UserType {
   id: string;
   username: string;
   email: string;
-  password: string;
-  avatar_url?: string | null;
+  password_hash: string;
   games_played: number;
   games_won: number;
   times_impostor: number;
@@ -15,7 +14,7 @@ export interface UserType {
 
 type UserCreationAttributes = Optional<
   UserType,
-  "id" | "avatar_url" | "games_played" | "games_won" | "times_impostor" | "times_eliminated"
+  "id" | "games_played" | "games_won" | "times_impostor" | "times_eliminated"
 >;
 
 const User = sequelize.define<Model<UserType, UserCreationAttributes>>(
@@ -37,13 +36,9 @@ const User = sequelize.define<Model<UserType, UserCreationAttributes>>(
       unique: true,
       validate: { isEmail: true },
     },
-    password: {
+    password_hash: {
       type: DataTypes.STRING,
       allowNull: false,
-    },
-    avatar_url: {
-      type: DataTypes.STRING,
-      allowNull: true,
     },
     games_played: {
       type: DataTypes.INTEGER,

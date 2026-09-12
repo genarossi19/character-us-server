@@ -22,7 +22,7 @@ export function checkWinConditions(room: RoomState): WinCheckResult {
   const crewCount = aliveCrew.length;
 
   if (impostorCount === 0) {
-    return { gameOver: true, winner: "crew" };
+    return { gameOver: true, winner: "innocent" };
   }
 
   if (impostorCount >= crewCount && aliveJokers.length === 0) {
@@ -42,7 +42,7 @@ export function checkWinConditions(room: RoomState): WinCheckResult {
     if (survivedImpostors > totalImpostors / 2) {
       return { gameOver: true, winner: "impostor" };
     }
-    return { gameOver: true, winner: "crew" };
+    return { gameOver: true, winner: "innocent" };
   }
 
   return { gameOver: false };
