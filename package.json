@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",
+    "test:auth": "node --test src/auth/tests/google.test.ts",
     "start": "node dist/index.js",
     "verify:supabase": "ts-node src/db/tests/verifyBackendSupabase.ts"
   },
@@ -20,6 +21,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "google-auth-library": "^11.3.1",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
     "pg": "^8.16.3",

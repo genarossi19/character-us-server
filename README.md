@@ -32,7 +32,7 @@ El backend no sincroniza ni migra el esquema al iniciar. Supabase debe tener est
 
 Campos contractuales relevantes:
 
-- `users.password_hash`: hash bcrypt. La API recibe `password`, pero nunca lo persiste en texto plano.
+- `users.password_hash`: hash bcrypt; puede ser nulo para cuentas Google tras aplicar la migracion. `users.google_sub` identifica de forma unica la cuenta Google y `username` es el nombre visible, que puede repetirse. La API recibe `password`, pero nunca lo persiste en texto plano.
 - `character.image`: `TEXT`. La API usa y serializa `imageUrl`; Sequelize lo mapea a la columna `image`.
 - `game_history.winner`: enum con solo `innocent` e `impostor`.
 - `avatarUrl` no pertenece a `users`; solo identifica al jugador dentro de una sala y se envia por Socket.IO.
@@ -57,6 +57,8 @@ Variables requeridas:
 | `CORS_ORIGIN` | Orígenes del frontend permitidos, separados por comas, para API y Socket.IO. |
 
 ## Autenticacion
+
+- `POST /api/auth/google` autentica con Google Identity Services y devuelve el mismo JWT de acceso. Requiere `GOOGLE_CLIENT_ID` y el esquema de usuarios habilitado para identidades Google.
 
 - `POST /api/auth/signup` registra `username`, `email`, `password` y `confirmPassword`; persiste solo el hash bcrypt.
 - `POST /api/auth/login` devuelve un JWT de acceso y el perfil público actual.

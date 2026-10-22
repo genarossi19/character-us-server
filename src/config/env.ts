@@ -19,6 +19,7 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET!,
   JWT_ISSUER: process.env.JWT_ISSUER || "character-us-server",
   JWT_AUDIENCE: process.env.JWT_AUDIENCE || "character-us-client",
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID?.trim() || "",
   COOKIE_SECRET:
     process.env.COOKIE_SECRET || "dev-only-secret-change-in-production",
   ADMIN_EMAIL: process.env.ADMIN_EMAIL!,

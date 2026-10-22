@@ -29,7 +29,7 @@ En la sala de espera, el estado también conserva un vencimiento de inactividad 
 
 PostgreSQL conserva:
 
-- `users`: `id`, `username`, `email`, `password_hash`, estadisticas y timestamps. No almacena avatar, nombre ni apellido.
+- `users`: `id`, `username`, `email`, `password_hash`, `google_sub`, estadisticas y timestamps. `username` es el nombre visible y puede repetirse; Google completa ese campo con su nombre. No almacena avatar.
 - `category`: catalogo de categorias.
 - `character`: personajes con `image` de tipo `TEXT` y `category_id`.
 - `game_history`: resumen final de partida. `winner` solo admite `innocent` o `impostor`.
@@ -45,6 +45,8 @@ un nuevo transporte a ese jugador y devuelve un snapshot privado de la partida.
 La gracia de desconexión es de 60 segundos; recuperar no reinicia timers ni votos.
 
 ## Identidad y autorizacion
+
+- Google Identity Services: `POST /api/auth/google` verifica el ID token con `google-auth-library` y emite el mismo JWT local. `users.google_sub` es unico y estable; el nombre de Google se guarda en `users.username`, que no es unico. `password_hash` puede ser nulo para cuentas Google. No se vinculan cuentas por email, excepto la reparacion de cuentas Google anteriores con un alias `google_<hex>`.
 
 - Registro y login devuelven un JWT de acceso de una hora y el perfil público con estadísticas.
 - El token se firma con `HS256` y valida emisor, audiencia, expiración y sujeto. No contiene secretos ni `password_hash`.

@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { env } from "../../config/env.ts";
+import { GoogleAuthError, verifyGoogleCredential } from "../../auth/google.ts";
+import { findOrCreateGoogleUser } from "../services/auth/google.service.ts";
 import User from "../../db/models/User.ts";
 import {
   ACCESS_TOKEN_EXPIRES_IN_SECONDS,
@@ -71,6 +74,36 @@ function authResponse(user: AuthUser) {
   };
 }
 
+const googleSchema = z.object({ credential: z.string().trim().min(1).max(16_384) });
+
+export async function googleLogin(req: Request, res: Response) {
+  // Callback JS + JSON + Bearer: no establece cookies de sesion ni acepta formularios redirect.
+  if (!req.is("application/json")) {
+    return res.status(415).json({ message: "Envia la credencial como application/json." });
+  }
+  const origin = req.get("origin");
+  if (origin && !env.CORS_ORIGINS.includes(origin)) {
+    return res.status(403).json({ message: "Origen no permitido." });
+  }
+  const parsed = googleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Envia una credencial de Google valida.", errors: validationErrors(parsed.error) });
+  }
+
+  try {
+    const identity = await verifyGoogleCredential(parsed.data.credential);
+    const user = await findOrCreateGoogleUser(identity);
+    return res.json(authResponse(toAuthUser(user)));
+  } catch (error) {
+    if (error instanceof GoogleAuthError) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    // Errores de Sequelize pueden contener email y SQL: no volcar el objeto.
+    console.error("Error interno al iniciar sesion con Google.");
+    return res.status(500).json({ message: "No pudimos iniciar sesion. Intenta nuevamente." });
+  }
+}
+
 export async function signup(req: Request, res: Response) {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -86,11 +119,6 @@ export async function signup(req: Request, res: Response) {
     const existing = await User.findOne({ where: { email } });
     if (existing) {
       return res.status(409).json({ message: "El email ya está registrado" });
-    }
-
-    const existingUsername = await User.findOne({ where: { username } });
-    if (existingUsername) {
-      return res.status(409).json({ message: "El nombre de usuario ya está en uso" });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -124,10 +152,8 @@ export async function login(req: Request, res: Response) {
       return res.status(401).json({ message: "El correo o la contraseña no son correctos." });
     }
 
-    const validPassword = await bcrypt.compare(
-      password,
-      user.get("password_hash") as string
-    );
+    const passwordHash = user.get("password_hash") as string | null;
+    const validPassword = passwordHash ? await bcrypt.compare(password, passwordHash) : false;
     if (!validPassword) {
       return res.status(401).json({ message: "El correo o la contraseña no son correctos." });
     }

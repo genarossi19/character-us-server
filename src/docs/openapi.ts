@@ -54,6 +54,27 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/auth/google": {
+      post: {
+        tags: ["Auth"],
+        summary: "Iniciar sesion o crear cuenta con Google",
+        description: "Callback JavaScript de Google Identity Services. Recibe un ID token y devuelve un JWT de CharacterUs. No vincula cuentas existentes por email.",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/GoogleLoginRequest" } } },
+        },
+        responses: {
+          "200": { description: "Sesion creada", content: jsonSchema("AuthResponse") },
+          "400": { description: "Credencial requerida", content: jsonSchema("ValidationError") },
+          "401": { description: "Credencial invalida o email no verificado", content: jsonSchema("Error") },
+          "403": { description: "Origen no permitido", content: jsonSchema("Error") },
+          "409": { description: "Email ya registrado con otra identidad", content: jsonSchema("Error") },
+          "415": { description: "Se requiere application/json", content: jsonSchema("Error") },
+          "500": { description: "Error interno", content: jsonSchema("Error") },
+          "503": { description: "Google no configurado", content: jsonSchema("Error") },
+        },
+      },
+    },
     "/api/auth/me": {
       get: {
         tags: ["Auth"],
@@ -288,7 +309,7 @@ export const openApiSpec = {
         type: "http",
         scheme: "bearer",
         bearerFormat: "JWT",
-        description: "Token obtenido de /api/auth/signup o /api/auth/login.",
+        description: "Token obtenido de /api/auth/signup, /api/auth/login o /api/auth/google.",
       },
     },
     schemas: {
@@ -325,6 +346,11 @@ export const openApiSpec = {
           email: { type: "string", format: "email", example: "player@example.com" },
           password: { type: "string", format: "password" },
         },
+      },
+      GoogleLoginRequest: {
+        type: "object",
+        required: ["credential"],
+        properties: { credential: { type: "string", minLength: 1, maxLength: 16384, description: "ID token devuelto por Google Identity Services." } },
       },
       AuthUser: {
         type: "object",

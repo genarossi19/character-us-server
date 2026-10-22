@@ -23,6 +23,14 @@ La documentación navegable está disponible en `GET /docs`; su especificación 
 
 ### 2.1 Auth — `/api/auth`
 
+#### Login con Google
+
+`POST /api/auth/google` recibe JSON `{ "credential": "ID_TOKEN_DE_GOOGLE" }` desde
+el callback de Google Identity Services. Devuelve `{ user, token, tokenType, expiresIn }`
+igual que `/login`; `user.username` es directamente el nombre recuperado de Google.
+Usar el JWT devuelto y `user.username` para el juego. Si el email ya existe con otro metodo
+responde `409`, sin vincular cuentas.
+
 #### `POST /api/auth/signup`
 
 Registra un usuario nuevo.

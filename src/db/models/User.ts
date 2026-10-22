@@ -5,7 +5,8 @@ export interface UserType {
   id: string;
   username: string;
   email: string;
-  password_hash: string;
+  password_hash: string | null;
+  google_sub: string | null;
   games_played: number;
   games_won: number;
   times_impostor: number;
@@ -14,7 +15,7 @@ export interface UserType {
 
 type UserCreationAttributes = Optional<
   UserType,
-  "id" | "games_played" | "games_won" | "times_impostor" | "times_eliminated"
+  "id" | "games_played" | "games_won" | "times_impostor" | "times_eliminated" | "google_sub"
 >;
 
 const User = sequelize.define<Model<UserType, UserCreationAttributes>>(
@@ -26,9 +27,8 @@ const User = sequelize.define<Model<UserType, UserCreationAttributes>>(
       defaultValue: DataTypes.UUIDV4,
     },
     username: {
-      type: DataTypes.STRING(30),
+      type: DataTypes.STRING(100),
       allowNull: false,
-      unique: true,
     },
     email: {
       type: DataTypes.STRING,
@@ -38,7 +38,12 @@ const User = sequelize.define<Model<UserType, UserCreationAttributes>>(
     },
     password_hash: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
+    },
+    google_sub: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
     },
     games_played: {
       type: DataTypes.INTEGER,
