@@ -16,6 +16,7 @@ El contrato para el frontend esta en [`frontend.md`](./frontend.md).
 - Socket.IO usa exclusivamente el transporte `websocket`.
 - El servidor escucha en `0.0.0.0`, para pruebas desde la LAN.
 - Las salas, turnos, roles, votos y chat viven en memoria. Un reinicio termina las partidas activas.
+- Una sala en espera avisa a los 35 minutos de inactividad y se cierra a los 40 si no hay actividad ni una renovación del host por Socket.IO.
 
 ## Persistencia
 
@@ -53,6 +54,7 @@ Variables requeridas:
 | `ADMIN_EMAIL` | Cuenta administradora de AdminJS y rutas de escritura. |
 | `ADMIN_HASH` | Hash bcrypt del acceso a AdminJS. |
 | `PORT` | Puerto del servidor; por defecto `3000`. |
+| `CORS_ORIGIN` | Orígenes del frontend permitidos, separados por comas, para API y Socket.IO. |
 
 ## Autenticacion
 
@@ -60,7 +62,7 @@ Variables requeridas:
 - `POST /api/auth/login` devuelve un JWT de acceso y el perfil público actual.
 - `GET /api/auth/me` devuelve el perfil actualizado a partir de un JWT Bearer válido.
 - Los JWT duran una hora, usan `HS256`, emisor y audiencia configurables; nunca contienen hashes ni contraseñas.
-- Solo una cuenta con JWT vigente puede enviar `createRoom`; el token se envia en el payload de ese evento y el nombre debe coincidir con la sesión.
+- Solo una cuenta con JWT vigente puede enviar `createRoom`. Sin JWT, `joinRoom` solo permite entrar como invitado mediante un código; el servidor no confía en `isGuest` ni `userId` aportados por el cliente.
 - Las mutaciones de categorias y personajes requieren `Authorization: Bearer <token>` de la cuenta configurada como admin.
 
 ## Juego

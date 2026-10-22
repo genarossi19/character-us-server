@@ -25,6 +25,8 @@
 
 Las salas no se persisten. `RoomState` contiene jugadores, host, PIN, fase, turnos, votos, roles y chat. Todo ese estado se pierde al reiniciar el proceso.
 
+En la sala de espera, el estado también conserva un vencimiento de inactividad en memoria: avisa a los 35 minutos y cierra a los 40 si no hay actividad ni renovación. El temporizador se suspende durante una partida y se reinicia al terminarla.
+
 PostgreSQL conserva:
 
 - `users`: `id`, `username`, `email`, `password_hash`, estadisticas y timestamps. No almacena avatar, nombre ni apellido.
@@ -35,13 +37,20 @@ PostgreSQL conserva:
 
 El avatar es un dato de `PlayerState` y solo existe dentro de una partida/sala.
 
+La identidad de sala se conserva entre conexiones: `PlayerPublic.socketId` pasa
+a ser un ID estable, mientras `connectionSocketId` identifica el transporte actual.
+Los acks de creación/unión entregan un token aleatorio de recuperación; el backend
+solo conserva su hash y nunca lo incluye en payloads públicos. `resumeRoom` vincula
+un nuevo transporte a ese jugador y devuelve un snapshot privado de la partida.
+La gracia de desconexión es de 60 segundos; recuperar no reinicia timers ni votos.
+
 ## Identidad y autorizacion
 
 - Registro y login devuelven un JWT de acceso de una hora y el perfil público con estadísticas.
 - El token se firma con `HS256` y valida emisor, audiencia, expiración y sujeto. No contiene secretos ni `password_hash`.
 - `GET /api/auth/me` consulta Supabase para devolver el perfil actualizado de una sesión Bearer válida.
 - `createRoom` verifica el token entregado en su payload, asigna su `userId` al host y exige que el `username` coincida con la sesión.
-- Unirse a una sala permite invitados y usuarios registrados; `userId` es opcional en `joinRoom`.
+- Unirse a una sala permite invitados y usuarios registrados mediante código. `joinRoom` recibe un `token` opcional: sin token el servidor fija `isGuest: true` y `userId: null`; con token válido obtiene ambos valores de la sesión, sin confiar en campos de identidad enviados por el cliente.
 - Las mutaciones REST de catalogo requieren el JWT del email administrador configurado.
 
 ## Fases del juego
