@@ -73,4 +73,6 @@ El ganador interno, emitido al cliente y persistido es `innocent` o `impostor`.
 
 `RoomPublic` y `PlayerPublic` no incluyen `characterId`, `isImpostor` ni `isJoker`. Las asignaciones de personaje se emiten individualmente con `characterAssigned` para preservar el secreto del rol.
 
+Al terminar la partida, `gameEnded.impostorIds` revela los IDs estables de todos los impostores antes de restablecer la sala. El cliente conserva este resultado final para que el siguiente `roomUpdated` no lo borre. Los roles siguen ausentes de `RoomPublic` y `PlayerPublic` durante la partida.
+
 La especificacion HTTP y Socket.IO completa se mantiene en [`../frontend.md`](../frontend.md).

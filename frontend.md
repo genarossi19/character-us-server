@@ -395,6 +395,7 @@ interface GameResult {
   winner: "innocent" | "impostor";
   rounds: RoundResult[];
   players: PlayerPublic[];
+  impostorIds: string[]; // roles revelados únicamente al finalizar, en gameEnded
 }
 ```
 

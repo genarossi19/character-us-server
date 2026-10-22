@@ -102,6 +102,8 @@ export interface GameResult {
   winner: GameWinner;
   rounds: RoundResult[];
   players: PlayerPublic[];
+  // Revealed to the room only after the game is finished.
+  impostorIds: string[];
 }
 
 export interface PlayerPublic {

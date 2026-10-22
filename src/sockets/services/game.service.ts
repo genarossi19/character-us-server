@@ -771,6 +771,7 @@ function finishGame(
     winner,
     rounds: room.roundResults,
     players: allPlayers,
+    impostorIds: Array.from(room.players.values()).filter((player) => player.isImpostor).map((player) => player.socketId),
   });
 
   room.status = "waiting";

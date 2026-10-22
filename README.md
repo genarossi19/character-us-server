@@ -75,6 +75,7 @@ El flujo es `waiting -> character -> word -> debate -> voting -> results`.
 - Debate y votacion duran 40 segundos.
 - El chat esta habilitado durante debate y votacion.
 - El valor de ganador emitido y persistido es `innocent` o `impostor`.
+- `gameEnded` incluye `impostorIds` para revelar nombres y avatares al finalizar; los DTOs públicos de sala siguen sin roles.
 
 ## Comandos
 
