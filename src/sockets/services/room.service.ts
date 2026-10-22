@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import type { Server as SocketIOServer } from "socket.io";
 import type { RoomState, PlayerState, RoomSettings } from "../../types/game.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
 
@@ -118,6 +119,9 @@ export function createRoom(
     phaseTimer: null,
     turnTimer: null,
     debateTimer: null,
+    inactivityTimer: null,
+    inactivityWarningTimer: null,
+    inactivityExpiresAt: null,
     votes: new Map(),
     roundResults: [],
     chatMessages: [],
@@ -210,6 +214,7 @@ export function removePlayerFromRoom(socketId: string): {
   if (!player) return null;
 
   const wasHost = player.isHost;
+  if (player.reconnectTimer) clearTimeout(player.reconnectTimer);
 
   room.players.delete(socketId);
   socketToRoom.delete(socketId);
@@ -217,9 +222,32 @@ export function removePlayerFromRoom(socketId: string): {
   return { room, player, wasHost };
 }
 
+/** Solo una cuenta registrada puede asumir el rol de host. */
+export function assignRoomHost(room: RoomState, socketId: string): boolean {
+  const nextHost = room.players.get(socketId);
+  if (!nextHost || nextHost.isGuest) return false;
+
+  for (const player of room.players.values()) {
+    player.isHost = false;
+  }
+
+  nextHost.isHost = true;
+  room.hostId = socketId;
+  return true;
+}
+
 export function deleteRoom(roomId: string): void {
   const room = rooms.get(roomId);
   if (!room) return;
+
+  clearRoomInactivity(room);
+
+  for (const timer of [room.phaseTimer, room.turnTimer, room.debateTimer]) {
+    if (timer) clearTimeout(timer);
+  }
+  for (const player of room.players.values()) {
+    if (player.reconnectTimer) clearTimeout(player.reconnectTimer);
+  }
 
   for (const socketId of room.players.keys()) {
     socketToRoom.delete(socketId);
@@ -230,29 +258,65 @@ export function deleteRoom(roomId: string): void {
 }
 
 export function closeRoom(roomId: string, reason: string): void {
-  const room = rooms.get(roomId);
-  if (!room) return;
+  deleteRoom(roomId);
+}
 
-  if (room.phaseTimer) {
-    clearTimeout(room.phaseTimer);
-    room.phaseTimer = null;
+/**
+ * Inicia o renueva el vencimiento de una sala de espera. Una partida en curso
+ * administra sus propios temporizadores y no debe cerrarse por inactividad.
+ */
+export function renewRoomInactivity(io: SocketIOServer, room: RoomState): number | null {
+  clearRoomInactivity(room);
+
+  if (room.status !== "waiting") return null;
+
+  const expiresAt = Date.now() + GAME_CONFIG.ROOM.INACTIVITY_TIMEOUT_MS;
+  room.inactivityExpiresAt = expiresAt;
+
+  room.inactivityWarningTimer = setTimeout(() => {
+    if (rooms.get(room.id) !== room || room.status !== "waiting") return;
+
+    io.to(room.id).emit("roomInactivityWarning", {
+      roomId: room.id,
+      expiresAt,
+      remainingMs: GAME_CONFIG.ROOM.INACTIVITY_WARNING_MS,
+    });
+  }, GAME_CONFIG.ROOM.INACTIVITY_TIMEOUT_MS - GAME_CONFIG.ROOM.INACTIVITY_WARNING_MS);
+
+  room.inactivityTimer = setTimeout(() => {
+    if (rooms.get(room.id) !== room || room.status !== "waiting") return;
+
+    io.to(room.id).emit("roomClosed", {
+      reason: "La sala se cerró tras 40 minutos de inactividad",
+    });
+    closeRoom(room.id, "Inactividad de sala");
+  }, GAME_CONFIG.ROOM.INACTIVITY_TIMEOUT_MS);
+
+  return expiresAt;
+}
+
+export function clearRoomInactivity(room: RoomState): void {
+  if (room.inactivityTimer) {
+    clearTimeout(room.inactivityTimer);
+    room.inactivityTimer = null;
   }
 
-  for (const socketId of room.players.keys()) {
-    socketToRoom.delete(socketId);
+  if (room.inactivityWarningTimer) {
+    clearTimeout(room.inactivityWarningTimer);
+    room.inactivityWarningTimer = null;
   }
 
-  pinMap.delete(room.code);
-  rooms.delete(roomId);
+  room.inactivityExpiresAt = null;
 }
 
 export function getPublicRoom(room: RoomState) {
+  const { password: _password, ...publicSettings } = room.settings;
   return {
     id: room.id,
     code: room.code,
     hostId: room.hostId,
     name: room.name,
-    settings: room.settings,
+    settings: publicSettings,
     players: Array.from(room.players.values()).map((p) => ({
       socketId: p.socketId,
       userId: p.userId,
@@ -268,5 +332,6 @@ export function getPublicRoom(room: RoomState) {
     status: room.status,
     gamePhase: room.gamePhase,
     currentRound: room.currentRound,
+    inactivityExpiresAt: room.inactivityExpiresAt,
   };
 }

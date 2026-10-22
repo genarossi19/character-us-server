@@ -15,7 +15,8 @@ export function getPhaseDuration(phase: GamePhase): number {
 }
 
 export function getAlivePlayers(room: RoomState): PlayerState[] {
-  return Array.from(room.players.values()).filter((p) => p.isAlive && p.isOnline);
+  // Una desconexión temporal no elimina al jugador ni decide el ganador.
+  return Array.from(room.players.values()).filter((p) => p.isAlive);
 }
 
 export function getAliveCount(room: RoomState): number {
@@ -41,7 +42,7 @@ export function buildTurnOrder(room: RoomState): string[] {
 }
 
 export function canStartGame(room: RoomState): { ok: boolean; reason?: string } {
-  const playerCount = Array.from(room.players.values()).length;
+  const playerCount = Array.from(room.players.values()).filter((p) => p.isOnline).length;
   if (playerCount < GAME_CONFIG.MIN_PLAYERS) {
     return {
       ok: false,

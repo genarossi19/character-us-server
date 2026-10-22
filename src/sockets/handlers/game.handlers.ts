@@ -1,4 +1,5 @@
 import type { Server as SocketIOServer, Socket } from "socket.io";
+import { onAction } from "./action.ts";
 import type {
   SubmitWordPayload,
   VotePlayerPayload,
@@ -6,11 +7,33 @@ import type {
   DebateReadyPayload,
 } from "../../types/socket.ts";
 import { getRoom } from "../services/room.service.ts";
+import { GAME_CONFIG } from "../../config/game.ts";
+import { getPlayerId } from "../services/session.service.ts";
 import { submitWord, castVote, sendChatMessage, setDebateReady } from "../services/game.service.ts";
 
 export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
-  socket.on("submitWord", (payload: SubmitWordPayload, ack) => {
+  onAction(socket, "submitWord", (payload: SubmitWordPayload, callback) => {
+    // Algunos clientes emiten sin ack. La ausencia del callback nunca debe
+    // interrumpir el proceso después de guardar y difundir una palabra.
+    const ack = typeof callback === "function" ? callback : () => {};
     try {
+      if (!payload || typeof payload.roomId !== "string") {
+        return ack({
+          success: false,
+          message: "La sala es requerida",
+          code: "INVALID_PAYLOAD",
+        });
+      }
+
+      if (typeof payload.word !== "string" || !payload.word.trim() ||
+          payload.word.trim().length > GAME_CONFIG.WORD.MAX_LENGTH) {
+        return ack({
+          success: false,
+          message: `La palabra debe tener entre 1 y ${GAME_CONFIG.WORD.MAX_LENGTH} caracteres`,
+          code: "INVALID_WORD",
+        });
+      }
+
       const room = getRoom(payload.roomId);
       if (!room) {
         return ack({
@@ -20,7 +43,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         });
       }
 
-      const result = submitWord(io, room, socket.id, payload.word);
+      const result = submitWord(io, room, getPlayerId(socket), payload.word);
 
       if (!result.success) {
         const codeMap: Record<string, string> = {
@@ -49,7 +72,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
     }
   });
 
-  socket.on("votePlayer", (payload: VotePlayerPayload, ack) => {
+  onAction(socket, "votePlayer", (payload: VotePlayerPayload, ack) => {
     try {
       const room = getRoom(payload.roomId);
       if (!room) {
@@ -60,7 +83,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         });
       }
 
-      const result = castVote(io, room, socket.id, payload.targetId);
+      const result = castVote(io, room, getPlayerId(socket), payload.targetId);
 
       if (!result.success) {
         const codeMap: Record<string, string> = {
@@ -89,7 +112,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
     }
   });
 
-  socket.on("sendChatMessage", (payload: SendChatMessagePayload, ack) => {
+  onAction(socket, "sendChatMessage", (payload: SendChatMessagePayload, ack) => {
     try {
       const room = getRoom(payload.roomId);
       if (!room) {
@@ -100,7 +123,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         });
       }
 
-      const result = sendChatMessage(io, room, socket.id, payload.message);
+      const result = sendChatMessage(io, room, getPlayerId(socket), payload.message);
 
       if (!result.success) {
         const codeMap: Record<string, string> = {
@@ -127,7 +150,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
     }
   });
 
-  socket.on("debateReady", (payload: DebateReadyPayload, ack) => {
+  onAction(socket, "debateReady", (payload: DebateReadyPayload, ack) => {
     try {
       const room = getRoom(payload.roomId);
       if (!room) {
@@ -138,7 +161,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         });
       }
 
-      const result = setDebateReady(io, room, socket.id);
+      const result = setDebateReady(io, room, getPlayerId(socket));
 
       if (!result.success) {
         const codeMap: Record<string, string> = {

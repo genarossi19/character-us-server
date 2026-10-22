@@ -16,12 +16,20 @@ export interface CreateRoomPayload {
   token: string;
 }
 
+export interface RoomSession {
+  roomId: string;
+  playerId: string;
+  resumeToken: string;
+}
+
+export interface ResumeRoomPayload { roomId: string; resumeToken: string }
+export type RoomSnapshot = ReturnType<typeof import("../sockets/services/session.service.ts").getGameSnapshot>;
+
 export interface JoinRoomPayload {
   code: number;
   username: string;
-  isGuest: boolean;
-  avatarUrl?: string;
-  userId?: string;
+  /** JWT opcional. Sin él, el servidor une al jugador como invitado. */
+  token?: string;
   password?: string;
 }
 
@@ -61,6 +69,10 @@ export interface ChangeAvatarPayload {
   avatarId: string;           // "avatar-1" .. "avatar-8"
 }
 
+export interface RenewRoomInactivityPayload {
+  roomId: string;
+}
+
 export interface AckSuccess<T = void> {
   success: true;
   data?: T;
@@ -75,8 +87,10 @@ export interface AckError {
 export type Ack<T = void> = (response: AckSuccess<T> | AckError) => void;
 
 export interface SocketToServerEvents {
-  createRoom: (payload: CreateRoomPayload, ack: Ack<{ room: RoomPublic }>) => void;
-  joinRoom: (payload: JoinRoomPayload, ack: Ack<{ room: RoomPublic }>) => void;
+  createRoom: (payload: CreateRoomPayload, ack: Ack<{ room: RoomPublic; session: RoomSession }>) => void;
+  joinRoom: (payload: JoinRoomPayload, ack: Ack<{ room: RoomPublic; session: RoomSession }>) => void;
+  resumeRoom: (payload: ResumeRoomPayload, ack: Ack<RoomSnapshot>) => void;
+  getGameState: (payload: { roomId: string }, ack: Ack<RoomSnapshot>) => void;
   leaveRoom: (payload: LeaveRoomPayload, ack: Ack) => void;
   startGame: (payload: StartGamePayload, ack: Ack<{ room: RoomPublic }>) => void;
   kickPlayer: (payload: KickPlayerPayload, ack: Ack) => void;
@@ -85,14 +99,25 @@ export interface SocketToServerEvents {
   sendChatMessage: (payload: SendChatMessagePayload, ack: Ack) => void;
   debateReady: (payload: DebateReadyPayload, ack: Ack) => void;
   changeAvatar: (payload: ChangeAvatarPayload, ack: Ack) => void;
+  renewRoomInactivity: (
+    payload: RenewRoomInactivityPayload,
+    ack: Ack<{ expiresAt: number }>
+  ) => void;
 }
 
 export interface ServerToClientEvents {
+  actionError: (data: AckError & { event: string }) => void;
   roomUpdated: (room: RoomPublic) => void;
   playerJoined: (player: PlayerPublic) => void;
   playerLeft: (playerId: string) => void;
   playerKicked: (playerId: string) => void;
   roomClosed: (data: { reason: string }) => void;
+  roomInactivityWarning: (data: {
+    roomId: string;
+    expiresAt: number;
+    remainingMs: number;
+  }) => void;
+  roomInactivityRenewed: (data: { roomId: string; expiresAt: number }) => void;
   gameStarted: (data: { room: RoomPublic; totalRounds: number }) => void;
   characterAssigned: (data: CharacterAssignment) => void;
   phaseChanged: (data: { phase: GamePhase; data?: Record<string, unknown> }) => void;
@@ -128,4 +153,5 @@ export interface RoomPublic {
   status: "waiting" | "playing" | "finished";
   gamePhase: GamePhase;
   currentRound: number;
+  inactivityExpiresAt: number | null;
 }

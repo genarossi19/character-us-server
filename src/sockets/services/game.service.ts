@@ -17,7 +17,7 @@ import {
 } from "../../game/stateMachine.ts";
 import { checkWinConditions, calculateVoteResult } from "../../game/winConditions.ts";
 import { getRandomCharacterByCategory } from "../../api/services/character/character.service.ts";
-import { closeRoom, getPublicRoom } from "./room.service.ts";
+import { closeRoom, getRoom, getPublicRoom, renewRoomInactivity, assignRoomHost } from "./room.service.ts";
 import { forgetSocket } from "./room.service.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
 import { v4 as uuidv4 } from "uuid";
@@ -45,21 +45,29 @@ export async function startCharacterPhase(
   room: RoomState
 ): Promise<void> {
   room.gamePhase = "character";
+  room.phaseExpiresAt = null;
+  room.selectedCharacter = null;
 
   try {
     const character = await getRandomCharacterByCategory(
       room.settings.category
     );
+    // La consulta puede terminar después de abandonar o cerrar la sala.
+    if (getRoom(room.id) !== room || room.status !== "playing" || room.gamePhase !== "character") return;
 
     if (!character) {
-      io.to(room.hostId).emit("roomClosed", {
+      io.to(room.id).emit("roomClosed", {
         reason: "No hay personajes disponibles para esta categoría",
       });
       closeRoom(room.id, "No hay personajes");
       return;
     }
 
-    assignCharacters(room);
+    if (room.currentRound === 1) assignCharacters(room);
+    room.selectedCharacter = {
+      id: character.id, name: character.name, imageUrl: character.imageUrl ?? null,
+      category: room.settings.category,
+    };
 
     const impostorIds = room.settings.impostorsKnowEachOther
       ? Array.from(room.players.values())
@@ -85,11 +93,13 @@ export async function startCharacterPhase(
     }
 
     io.to(room.id).emit("phaseChanged", { phase: "character" });
+    io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 
     startPhaseTimer(io, room, "character");
   } catch (error) {
     console.error("Error asignando personajes:", error);
-    io.to(room.hostId).emit("roomClosed", {
+    if (getRoom(room.id) !== room) return;
+    io.to(room.id).emit("roomClosed", {
       reason: "No pudimos preparar la partida. Intenta crear una nueva sala.",
     });
     closeRoom(room.id, "Error al asignar personajes");
@@ -101,6 +111,7 @@ export function startWordPhase(
   room: RoomState
 ): void {
   room.gamePhase = "word";
+  room.phaseExpiresAt = null;
   room.turnOrder = buildTurnOrder(room);
   room.currentTurnIndex = 0;
 
@@ -111,6 +122,7 @@ export function startWordPhase(
 
 function startTurnTimer(io: SocketIOServer, room: RoomState): void {
   clearTurnTimer(room);
+  room.turnExpiresAt = Date.now() + GAME_CONFIG.WORD_TURN_TIMEOUT;
 
   room.turnTimer = setTimeout(() => {
     handleWordTurnTimeout(io, room);
@@ -118,6 +130,7 @@ function startTurnTimer(io: SocketIOServer, room: RoomState): void {
 }
 
 function clearTurnTimer(room: RoomState): void {
+  room.turnExpiresAt = null;
   if (room.turnTimer) {
     clearTimeout(room.turnTimer);
     room.turnTimer = null;
@@ -129,6 +142,7 @@ function handleWordTurnTimeout(
   room: RoomState
 ): void {
   room.turnTimer = null;
+  room.turnExpiresAt = null;
 
   if (room.gamePhase !== "word") return;
 
@@ -176,7 +190,7 @@ function emitCurrentTurn(io: SocketIOServer, room: RoomState): void {
   const currentSocketId = room.turnOrder[room.currentTurnIndex];
   const player = room.players.get(currentSocketId);
 
-  if (!player || !player.isAlive) {
+  if (!player || !player.isAlive || !player.isOnline || player.hasSubmittedWord) {
     room.currentTurnIndex++;
     emitCurrentTurn(io, room);
     return;
@@ -219,7 +233,7 @@ export function submitWord(
     return { success: false, error: "No es tu turno" };
   }
 
-  if (!word || word.trim().length === 0) {
+  if (typeof word !== "string" || word.trim().length === 0) {
     return { success: false, error: "La palabra no puede estar vacía" };
   }
 
@@ -256,7 +270,7 @@ export function submitWord(
 function finishWordPhase(io: SocketIOServer, room: RoomState): void {
   clearTurnTimer(room);
 
-  const hints: WordHint[] = getAlivePlayers(room).map((p) => ({
+  const hints: WordHint[] = Array.from(room.players.values()).filter((p) => p.hasSubmittedWord).map((p) => ({
     playerId: p.socketId,
     username: p.username,
     word: p.word || "",
@@ -274,6 +288,7 @@ export function startDebatePhase(
   room: RoomState
 ): void {
   room.gamePhase = "debate";
+  room.phaseExpiresAt = Date.now() + getPhaseDuration("debate");
 
   for (const player of room.players.values()) {
     player.isDebateReady = false;
@@ -358,7 +373,7 @@ export function sendChatMessage(
     return { success: false, error: "Jugador no encontrado" };
   }
 
-  if (!message || message.trim().length === 0) {
+  if (typeof message !== "string" || message.trim().length === 0) {
     return { success: false, error: "El mensaje no puede estar vacío" };
   }
 
@@ -375,7 +390,6 @@ export function sendChatMessage(
   if (now - lastTime < GAME_CONFIG.CHAT.FLOOD_LIMIT_MS) {
     return { success: false, error: "Enviando mensajes muy rápido" };
   }
-  lastMessageTimestamp.set(socketId, now);
 
   const isGhost = !player.isAlive;
   const isCurrentPhase = room.gamePhase === "debate" || room.gamePhase === "voting";
@@ -383,6 +397,7 @@ export function sendChatMessage(
   if (!isCurrentPhase) {
     return { success: false, error: "No se pueden enviar mensajes en esta fase" };
   }
+  lastMessageTimestamp.set(socketId, now);
 
   const chatMessage: ChatMessage = {
     id: uuidv4(),
@@ -472,7 +487,7 @@ export function castVote(
 
   const visible = room.settings.visibleVotes;
   io.to(room.id).emit("voteUpdate", {
-    votes: votesRecord,
+    votes: visible ? votesRecord : {},
     voterId,
     targetId: visible ? targetId : undefined,
     visible,
@@ -537,7 +552,7 @@ function finishVotingPhase(
     });
   }
 
-  const wordHints: WordHint[] = getAlivePlayers(room).map((p) => ({
+  const wordHints: WordHint[] = Array.from(room.players.values()).filter((p) => p.hasSubmittedWord).map((p) => ({
     playerId: p.socketId,
     username: p.username,
     word: p.word || "",
@@ -597,6 +612,7 @@ function startResultsPhase(
   _roundResult: RoundResult
 ): void {
   room.gamePhase = "results";
+  io.to(room.id).emit("phaseChanged", { phase: "results" });
 
   startPhaseTimer(io, room, "results");
 }
@@ -611,6 +627,7 @@ function startPhaseTimer(
   }
 
   const duration = getPhaseDuration(phase);
+  room.phaseExpiresAt = duration > 0 ? Date.now() + duration : null;
   if (duration === 0) return;
 
   room.phaseTimer = setTimeout(() => {
@@ -623,6 +640,7 @@ function handlePhaseTimeout(
   room: RoomState,
   phase: GamePhase
 ): void {
+  if (getRoom(room.id) !== room || room.status !== "playing" || room.gamePhase !== phase) return;
   room.phaseTimer = null;
 
   switch (phase) {
@@ -648,7 +666,9 @@ async function persistGameHistory(
   winner: "innocent" | "impostor"
 ): Promise<void> {
   try {
-    const players = Array.from(room.players.values());
+    // La escritura continúa después de que finishGame restablece el lobby.
+    const players = Array.from(room.players.values()).map((player) => ({ ...player }));
+    const roundResults = [...room.roundResults];
     const impostorCount = players.filter((p) => p.isImpostor).length;
 
     const gameHistory = await GameHistory.create({
@@ -664,7 +684,7 @@ async function persistGameHistory(
     const gameId = gameHistory.get("id") as string;
 
     for (const player of players) {
-      const lastRound = room.roundResults.find((r) => {
+      const lastRound = roundResults.find((r) => {
         if (!r.eliminatedPlayer) return false;
         return r.eliminatedPlayer.socketId === player.socketId;
       });
@@ -720,6 +740,7 @@ function finishGame(
 ): void {
   room.gamePhase = "finished";
   room.status = "finished";
+  room.phaseExpiresAt = null;
 
   if (room.phaseTimer) {
     clearTimeout(room.phaseTimer);
@@ -753,6 +774,7 @@ function finishGame(
   });
 
   room.status = "waiting";
+  room.selectedCharacter = null;
   room.gamePhase = "waiting";
   room.currentRound = 0;
   room.roundResults = [];
@@ -769,6 +791,9 @@ function finishGame(
     player.hasVoted = false;
     player.votedFor = null;
   }
+
+  renewRoomInactivity(io, room);
+  io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 }
 
 export function handlePlayerDisconnect(
@@ -781,10 +806,13 @@ export function handlePlayerDisconnect(
 
   player.isOnline = false;
   player.disconnectedAt = Date.now();
+  if (player.reconnectTimer) clearTimeout(player.reconnectTimer);
 
   io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 
-  const timeout = setTimeout(() => {
+  player.reconnectTimer = setTimeout(() => {
+    if (getRoom(room.id) !== room) return;
+    delete player.reconnectTimer;
     const currentPlayer = room.players.get(socketId);
     if (currentPlayer && !currentPlayer.isOnline) {
       const wasHost = currentPlayer.isHost;
@@ -796,6 +824,12 @@ export function handlePlayerDisconnect(
       io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 
       if (wasHost) {
+        if (room.status === "waiting") {
+          const nextHost = Array.from(room.players.values()).find((p) => !p.isGuest && p.isOnline);
+          if (nextHost) assignRoomHost(room, nextHost.socketId);
+          io.to(room.id).emit("roomUpdated", getPublicRoom(room));
+          return;
+        }
         io.to(room.id).emit("roomClosed", {
           reason: "El host se desconectó",
         });
@@ -803,12 +837,13 @@ export function handlePlayerDisconnect(
         return;
       }
 
-      checkMidGameRemoval(io, room);
+      if (room.status === "playing") checkMidGameRemoval(io, room);
     }
   }, GAME_CONFIG.RECONNECT_TIMEOUT);
 
-  const timerKey = `reconnect_${socketId}`;
-  (room as unknown as Record<string, unknown>)[timerKey] = timeout;
+  io.to(room.id).emit("reconnectTimeout", {
+    playerId: socketId, secondsLeft: GAME_CONFIG.RECONNECT_TIMEOUT / 1000,
+  });
 }
 
 export function handlePlayerReconnect(
@@ -819,13 +854,9 @@ export function handlePlayerReconnect(
   const player = room.players.get(socketId);
   if (!player) return;
 
-  const timerKey = `reconnect_${socketId}`;
-  const existingTimer = (room as unknown as Record<string, unknown>)[timerKey] as
-    | ReturnType<typeof setTimeout>
-    | undefined;
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-    delete (room as unknown as Record<string, unknown>)[timerKey];
+  if (player.reconnectTimer) {
+    clearTimeout(player.reconnectTimer);
+    delete player.reconnectTimer;
   }
 
   player.isOnline = true;

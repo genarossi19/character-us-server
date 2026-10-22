@@ -24,6 +24,9 @@ export interface RoomSettings {
 }
 
 export interface PlayerState {
+  resumeTokenHash?: string;
+  connectionSocketId?: string;
+  reconnectTimer?: ReturnType<typeof setTimeout>;
   socketId: string;
   userId: string | null;
   username: string;
@@ -44,6 +47,9 @@ export interface PlayerState {
 }
 
 export interface RoomState {
+  selectedCharacter?: CharacterAssignment["character"];
+  phaseExpiresAt?: number | null;
+  turnExpiresAt?: number | null;
   id: string;
   code: number;
   hostId: string;
@@ -58,6 +64,9 @@ export interface RoomState {
   phaseTimer: ReturnType<typeof setTimeout> | null;
   turnTimer: ReturnType<typeof setTimeout> | null;
   debateTimer: ReturnType<typeof setTimeout> | null;
+  inactivityTimer: ReturnType<typeof setTimeout> | null;
+  inactivityWarningTimer: ReturnType<typeof setTimeout> | null;
+  inactivityExpiresAt: number | null;
   votes: Map<string, string>;
   roundResults: RoundResult[];
   chatMessages: ChatMessage[];

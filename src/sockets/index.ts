@@ -1,6 +1,7 @@
 import type { Server as SocketIOServer } from "socket.io";
 import { registerRoomHandlers } from "./handlers/room.handlers.ts";
 import { registerGameHandlers } from "./handlers/game.handlers.ts";
+import { registerSessionHandlers } from "./handlers/session.handlers.ts";
 
 export function registerSocketHandlers(io: SocketIOServer): void {
   io.on("connection", (socket) => {
@@ -8,6 +9,7 @@ export function registerSocketHandlers(io: SocketIOServer): void {
 
     registerRoomHandlers(io, socket);
     registerGameHandlers(io, socket);
+    registerSessionHandlers(io, socket);
 
     socket.on("disconnect", (reason) => {
       console.log(
