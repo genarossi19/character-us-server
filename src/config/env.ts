@@ -25,5 +25,9 @@ export const env = {
   ADMIN_HASH: process.env.ADMIN_HASH!,
   PORT: parseInt(process.env.PORT || "3000", 10),
   NODE_ENV: process.env.NODE_ENV || "development",
-  CORS_ORIGIN: process.env.CORS_ORIGIN || "http://localhost:5173",
+  CORS_ORIGINS: (process.env.CORS_ORIGIN ||
+    "http://localhost:5173,http://192.168.1.9:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 } as const;

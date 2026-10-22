@@ -19,7 +19,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: true,
+    origin: env.CORS_ORIGINS,
     credentials: true,
   })
 );
@@ -31,7 +31,7 @@ app.use(logger("dev"));
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: true,
+    origin: env.CORS_ORIGINS,
     credentials: true,
     methods: ["GET", "POST"],
   },
@@ -71,5 +71,5 @@ app.use("/api/character", characterRoute);
 app.use("/api/stats", statsRoute);
 
 server.listen(env.PORT, "0.0.0.0", () => {
-  console.log(`Servidor escuchando en http://localhost:${env.PORT}`);
+  console.log(`Servidor escuchando en 0.0.0.0:${env.PORT}`);
 });
