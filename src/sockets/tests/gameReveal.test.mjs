@@ -45,7 +45,7 @@ test("gameEnded reveals all impostors only at the end and preserves public playe
     }]));
     const room = { id: "room", players, votes: new Map(), roundResults: [], chatMessages: [],
       gamePhase: "word", status: "playing", currentRound: 1,
-      settings: { totalRounds: 5, visibleVotes: false, category: "test", impostorCount } };
+      settings: { totalRounds: 1, visibleVotes: false, category: "test", impostorCount } };
     const io = { to: () => ({ emit: (name, data) => events.push({ name, data: JSON.parse(JSON.stringify(data)) }) }) };
     game.startVotingPhase(io, room);
     assert.equal(events.some((event) => event.name === "gameEnded"), false);

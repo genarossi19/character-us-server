@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import type { Server as SocketIOServer } from "socket.io";
-import type { RoomState, PlayerState, RoomSettings } from "../../types/game.ts";
+import type { RoomState, PlayerState, RoomSettings } from "../../types/Game.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
 
 const rooms = new Map<string, RoomState>();

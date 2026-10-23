@@ -71,6 +71,8 @@ Variables requeridas:
 
 El flujo es `waiting -> character -> word -> debate -> voting -> results`.
 
+Sin ganador, `results` vuelve a `word` con el mismo personaje e impostores y sin revivir eliminados. Con ganador, `gameEnded` precede a `roomUpdated` en `waiting`, conservando sala y participantes para otra partida iniciada por el host. `totalRounds` ya no limita la partida.
+
 - Cada turno de palabra dura hasta 60 segundos.
 - Debate y votacion duran 40 segundos.
 - El chat esta habilitado durante debate y votacion.
@@ -82,8 +84,12 @@ El flujo es `waiting -> character -> word -> debate -> voting -> results`.
 | Comando | Uso |
 | --- | --- |
 | `npm run dev` | Inicia el servidor con nodemon y ts-node. |
+| `npm run build` | Compila TypeScript a JavaScript ESM en `dist/`, reescribiendo imports relativos `.ts` a `.js`. |
+| `npm start` | Ejecuta `dist/index.js` después de compilar. Requiere las variables del backend. |
 | `npx tsc --noEmit` | Verificacion de tipos. |
 | `npx ts-node src/db/tests/testConnection.ts` | Prueba manual de conexion PostgreSQL. Revisar la salida: no falla el exit code ante error. |
 | `npm run verify:supabase` | Verificacion de solo lectura de Supabase y endpoints. Usar `AUTH_TEST_WRITE=true npm run verify:supabase` para probar registro, login y `/me` con un usuario temporal que se elimina al finalizar. |
 
-`npm run build` conserva una configuracion de emision pendiente: TypeScript valida, pero `noEmit` impide generar `dist/`; por tanto `npm start` no es una verificacion de produccion valida todavia.
+TypeScript 5.9 reescribe las extensiones relativas para conservar los imports `.ts` en desarrollo y producir imports `.js` ejecutables por Node en `dist/`.
+
+En Render, usar `npm ci --include=dev && npm run build` como Build Command. El compilador y los paquetes `@types/*` están en `devDependencies`; `--include=dev` evita que una configuración de producción los omita durante el build.

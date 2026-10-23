@@ -21,6 +21,8 @@
 3. Socket.IO se monta sobre el mismo servidor, con `websocket` como unico transporte.
 4. El proceso escucha en `0.0.0.0` y `PORT` (3000 por defecto).
 
+`npm run build` emite JavaScript ESM en `dist/` con TypeScript 5.9 y `rewriteRelativeImportExtensions`: los imports relativos `.ts` se convierten en `.js`. `npm start` ejecuta `dist/index.js`; `npx tsc --noEmit` permite verificar tipos sin emitir archivos. Los contratos del juego se importan desde `src/types/Game.ts`, respetando las mayúsculas del archivo versionado.
+
 ## Estado y persistencia
 
 Las salas no se persisten. `RoomState` contiene jugadores, host, PIN, fase, turnos, votos, roles y chat. Todo ese estado se pierde al reiniciar el proceso.
@@ -65,7 +67,9 @@ waiting -> character -> word -> debate -> voting -> results
 - `word`: turnos individuales; cada jugador tiene hasta 60 segundos.
 - `debate`: 40 segundos, con chat y posibilidad de adelantar mediante `debateReady` de todos los jugadores vivos.
 - `voting`: 40 segundos, un voto definitivo por jugador.
-- `results`: 5 segundos. La partida sigue o finaliza segun `winConditions`.
+- `results`: 5 segundos entre rondas sin ganador; luego vuelve a `word`. Se conservan personaje, roles y eliminados; se limpian palabras, votos, preparación y chat y se genera otro orden de turnos para los vivos.
+- La partida termina al eliminar a todos los impostores (`innocent`) o alcanzar paridad entre impostores y tripulantes (`impostor`). `totalRounds` se conserva por compatibilidad, pero no fuerza el final. Se emite `gameEnded` y luego `roomUpdated` con la misma sala en `waiting`: se conservan PIN, jugadores, avatares y host. Solo el próximo `startGame` sortea personaje y roles de nuevo; puede repetirse por azar.
+- Si los participantes restantes bajan de `max(MIN_PLAYERS, impostorCount + 1)`, se cierra la sala con `roomClosed`. Las desconexiones temporales conservan su gracia de 60 segundos antes de quitar al jugador; abandonar o ser expulsado aplica el control inmediatamente. El host también puede cerrar la sala al abandonarla.
 
 El ganador interno, emitido al cliente y persistido es `innocent` o `impostor`.
 

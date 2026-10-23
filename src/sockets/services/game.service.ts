@@ -7,13 +7,14 @@ import type {
   WordHint,
   ChatMessage,
   PlayerPublic,
-} from "../../types/game.ts";
+} from "../../types/Game.ts";
 import {
   getPhaseDuration,
   getAlivePlayers,
   buildTurnOrder,
   shuffleArray,
   prepareRoomForNextRound,
+  resetPlayerForNewRound,
 } from "../../game/stateMachine.ts";
 import { checkWinConditions, calculateVoteResult } from "../../game/winConditions.ts";
 import { getRandomCharacterByCategory } from "../../api/services/character/character.service.ts";
@@ -33,6 +34,7 @@ export function assignCharacters(room: RoomState): void {
   ).slice(0, room.settings.impostorCount);
 
   for (let i = 0; i < players.length; i++) {
+    resetPlayerForNewRound(players[i]);
     players[i].isImpostor = impostorIndices.includes(i);
     players[i].isJoker = false;
     players[i].isAlive = true;
@@ -44,6 +46,8 @@ export async function startCharacterPhase(
   io: SocketIOServer,
   room: RoomState
 ): Promise<void> {
+  if (checkMidGameRemoval(io, room)) return;
+
   room.gamePhase = "character";
   room.phaseExpiresAt = null;
   room.selectedCharacter = null;
@@ -63,7 +67,7 @@ export async function startCharacterPhase(
       return;
     }
 
-    if (room.currentRound === 1) assignCharacters(room);
+    assignCharacters(room);
     room.selectedCharacter = {
       id: character.id, name: character.name, imageUrl: character.imageUrl ?? null,
       category: room.settings.category,
@@ -88,7 +92,7 @@ export async function startCharacterPhase(
               category: room.settings.category,
             },
         isImpostor: player.isImpostor,
-        impostorIds,
+        impostorIds: player.isImpostor ? impostorIds : undefined,
       });
     }
 
@@ -593,13 +597,10 @@ function finishVotingPhase(
 
   const winCheck = checkWinConditions(room);
 
-  if (winCheck.gameOver) {
-    finishGame(io, room, winCheck.winner!);
-    return;
-  }
+  if (checkMidGameRemoval(io, room)) return;
 
-  if (room.currentRound >= room.settings.totalRounds) {
-    finishGame(io, room, winCheck.winner || "innocent");
+  if (winCheck.gameOver && winCheck.winner) {
+    finishGame(io, room, winCheck.winner);
     return;
   }
 
@@ -655,7 +656,8 @@ function handlePhaseTimeout(
       break;
     case "results": {
       prepareRoomForNextRound(room);
-      startCharacterPhase(io, room);
+      io.to(room.id).emit("roomUpdated", getPublicRoom(room));
+      startWordPhase(io, room);
       break;
     }
   }
@@ -781,6 +783,10 @@ function finishGame(
   room.roundResults = [];
   room.chatMessages = [];
 
+  room.votes.clear();
+  room.turnOrder = [];
+  room.currentTurnIndex = 0;
+
   for (const player of room.players.values()) {
     player.isAlive = true;
     player.isImpostor = false;
@@ -866,15 +872,19 @@ export function handlePlayerReconnect(
   io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 }
 
-function checkMidGameRemoval(
+/** Las desconexiones temporales cuentan hasta que vence su gracia. */
+export function checkMidGameRemoval(
   io: SocketIOServer,
   room: RoomState
-): void {
-  const winCheck = checkWinConditions(room);
+): boolean {
+  if (room.status !== "playing") return false;
+  const minimum = Math.max(GAME_CONFIG.MIN_PLAYERS, room.settings.impostorCount + 1);
+  if (room.players.size >= minimum) return false;
 
-  if (winCheck.gameOver) {
-    finishGame(io, room, winCheck.winner!);
-  }
+  const reason = `No hay jugadores suficientes para continuar (mínimo ${minimum})`;
+  io.to(room.id).emit("roomClosed", { reason });
+  closeRoom(room.id, reason);
+  return true;
 }
 
 function sendSystemMessage(

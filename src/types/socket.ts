@@ -7,7 +7,7 @@ import type {
   ChatMessage,
   GamePhase,
   WordHint,
-} from "./game.ts";
+} from "./Game.ts";
 
 export interface CreateRoomPayload {
   username: string;

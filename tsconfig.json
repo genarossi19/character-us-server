@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     /* === Estructura del proyecto === */
-    "baseUrl": ".",
     "rootDir": "./src",
     "outDir": "./dist",
 
@@ -12,8 +11,9 @@
     "esModuleInterop": true, // Permite importar librerías como express
     "resolveJsonModule": true, // Para importar JSON
     "allowSyntheticDefaultImports": true,
-    "noEmit": true,
+    "noEmit": false,
     "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     /* === Tipos y librerías === */
     "strict": true, // Chequeo estricto
     "forceConsistentCasingInFileNames": true,

@@ -47,6 +47,8 @@ test("recupera identidad, acciones y estado privado; invalida el transporte ante
 
   try {
     joinRoom("guest", room.code, "Guest", "", null, true, "secret");
+    joinRoom("extra-a", room.code, "Extra A", "", null, true, "secret");
+    joinRoom("extra-b", room.code, "Extra B", "", null, true, "secret");
     const original = connect("host");
     const guest = connect("guest");
     const session = issueRoomSession(room, original.socket);
@@ -74,7 +76,7 @@ test("recupera identidad, acciones y estado privado; invalida el transporte ante
     assert.equal(recovered.success, true);
     assert.equal(recovered.data.playerId, "host");
     assert.equal(recovered.data.room.hostId, "host");
-    assert.equal(recovered.data.room.players.length, 2);
+    assert.equal(recovered.data.room.players.length, 4);
     assert.equal(recovered.data.phaseExpiresAt, room.phaseExpiresAt);
     assert.equal(recovered.data.hasVoted, true);
     assert.equal(recovered.data.votedFor, "guest");

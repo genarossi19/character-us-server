@@ -645,7 +645,9 @@ Cambios de fase del juego.
 3. `debate` (40s) — chat abierto, marcar "listo"
 4. `voting` (40s) — votación
 5. `results` (5s) — se muestra resultado
-6. Vuelve a `character` o `finished`
+6. Sin ganador vuelve automáticamente a `word`: conserva personaje, impostores y eliminados; limpia palabras/votos/preparación/chat y genera nuevos turnos solo para los vivos. Antes se emite `roomUpdated` con `currentRound` actualizado. No se reenvía `characterAssigned` entre rondas.
+
+Eliminar todos los impostores da victoria `innocent`; alcanzar paridad da victoria `impostor`. `totalRounds` queda por compatibilidad y no fuerza el final. Se emite `gameEnded` y luego `roomUpdated` con la misma sala en `waiting`, sin cerrar ni abandonar la sala. El host puede iniciar otra partida con `startGame`, que vuelve a sortear roles y personaje (pueden repetirse por azar). Si quedan menos de `max(3, impostorCount + 1)` participantes al abandonar, ser expulsados o vencer su gracia de reconexión, se emite `roomClosed`.
 
 ---
 
@@ -795,7 +797,8 @@ Timeout de reconexión: **60 segundos**.
 ## 4. Flujo del juego (resumen para UI)
 
 ```
-waiting → character (6s) → word → debate (40s) → voting (40s) → results (5s) → character (siguiente ronda) → ... → finished
+waiting → character (6s) → word → debate (40s) → voting (40s) → results (5s) → word (siguiente ronda)
+Con ganador: voting → gameEnded → waiting (misma sala)
 ```
 
 1. **waiting** — sala de espera, host configura y arranca
@@ -804,7 +807,7 @@ waiting → character (6s) → word → debate (40s) → voting (40s) → result
 4. **debate** — chat abierto, discusión, botón "Listo" para saltar
 5. **voting** — votación, 40s, un voto por persona, no se puede cambiar
 6. **results** — 5s mostrando quién fue eliminado
-7. Vuelve a **character** (siguiente ronda) o **finished** (si terminaron las rondas)
+7. Vuelve a **word** sin ganador; con ganador emite **gameEnded** y regresa a **waiting**. Mantener la asignación privada entre rondas y conservar el resultado final antes de aplicar el lobby. No usar `totalRounds` para cerrar o avanzar la partida.
 
 ### Constantes del juego
 

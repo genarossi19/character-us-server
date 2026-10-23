@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Socket } from "socket.io";
-import type { RoomState } from "../../types/game.ts";
+import type { RoomState } from "../../types/Game.ts";
 import { getPublicRoom } from "./room.service.ts";
 
 export function getPlayerId(socket: Socket): string {
@@ -44,7 +44,7 @@ export function getGameSnapshot(room: RoomState, playerId: string) {
     characterAssignment: inGame && player.characterId ? {
       character: player.isImpostor ? null : room.selectedCharacter ?? null,
       isImpostor: player.isImpostor,
-      ...(room.settings.impostorsKnowEachOther ? {
+      ...(player.isImpostor && room.settings.impostorsKnowEachOther ? {
         impostorIds: Array.from(room.players.values()).filter((p) => p.isImpostor).map((p) => p.socketId),
       } : {}),
     } : null,

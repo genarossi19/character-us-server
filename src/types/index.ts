@@ -1,4 +1,4 @@
-export type { GamePhase, GameMode, GameWinner, RoomSettings, PlayerState, RoomState, WordHint, ChatMessage, RoundResult, GameResult, PlayerPublic, CharacterAssignment } from "./game.ts";
+export type { GamePhase, GameMode, GameWinner, RoomSettings, PlayerState, RoomState, WordHint, ChatMessage, RoundResult, GameResult, PlayerPublic, CharacterAssignment } from "./Game.ts";
 export type {
   CreateRoomPayload,
   JoinRoomPayload,

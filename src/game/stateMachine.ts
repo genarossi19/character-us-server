@@ -1,4 +1,4 @@
-import type { RoomState, GamePhase, PlayerState } from "../types/game.ts";
+import type { RoomState, GamePhase, PlayerState } from "../types/Game.ts";
 import { GAME_CONFIG } from "../config/game.ts";
 
 const PHASE_ORDER: GamePhase[] = ["character", "word", "debate", "voting", "results"];
@@ -43,10 +43,10 @@ export function buildTurnOrder(room: RoomState): string[] {
 
 export function canStartGame(room: RoomState): { ok: boolean; reason?: string } {
   const playerCount = Array.from(room.players.values()).filter((p) => p.isOnline).length;
-  if (playerCount < GAME_CONFIG.MIN_PLAYERS) {
+  if (playerCount < Math.max(GAME_CONFIG.MIN_PLAYERS, room.settings.impostorCount + 1)) {
     return {
       ok: false,
-      reason: `Se necesitan mínimo ${GAME_CONFIG.MIN_PLAYERS} jugadores`,
+      reason: `Se necesitan mínimo ${Math.max(GAME_CONFIG.MIN_PLAYERS, room.settings.impostorCount + 1)} jugadores`,
     };
   }
   if (room.status !== "waiting") {
@@ -77,11 +77,10 @@ export function resetPlayerForNewRound(player: PlayerState): void {
 export function prepareRoomForNextRound(room: RoomState): void {
   room.currentRound++;
   room.votes.clear();
-  room.turnOrder = buildTurnOrder(room);
+  room.chatMessages = [];
+  room.turnOrder = [];
   room.currentTurnIndex = 0;
   for (const player of room.players.values()) {
-    if (player.isAlive) {
-      resetPlayerForNewRound(player);
-    }
+    resetPlayerForNewRound(player);
   }
 }

@@ -48,7 +48,7 @@ test("todas las acciones contienen payloads inválidos y callbacks ausentes", as
   } finally { deleteRoom(room.id); }
 });
 
-test("transiciones, privacidad de votos y continuidad de roles entre rondas", async (t) => {
+test("transiciones, privacidad de votos y eliminación persistente entre rondas", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const events: Array<{ name: string; data: any }> = [];
   const io = { to: () => ({ emit: (name: string, data: unknown) => events.push({ name, data }) }) } as unknown as Server;
@@ -75,11 +75,10 @@ test("transiciones, privacidad de votos y continuidad de roles entre rondas", as
     assert.equal(room.gamePhase, "results");
     assert.equal(last(events.filter((event) => event.name === "phaseChanged")).data.phase, "results");
     assert.equal(room.players.get("a")!.isAlive, false);
-    room.currentRound = 2;
-    await startCharacterPhase(io, room);
+    t.mock.timers.tick(5_000);
+    assert.equal(room.currentRound, 2);
     assert.equal(room.players.get("a")!.isAlive, false);
-    assert.equal(room.players.get("host")!.isImpostor, true);
-    t.mock.timers.tick(6_000);
+    assert.equal([...room.players.values()].filter((p) => p.isImpostor).length, 1);
     assert.equal(room.gamePhase, "word");
     assert.equal(room.turnOrder.includes("a"), false);
   } finally {

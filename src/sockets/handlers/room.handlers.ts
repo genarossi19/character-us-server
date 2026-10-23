@@ -23,7 +23,7 @@ import {
   assignRoomHost,
 } from "../services/room.service.ts";
 import { canStartGame, isHost } from "../../game/stateMachine.ts";
-import { startCharacterPhase, handlePlayerDisconnect } from "../services/game.service.ts";
+import { startCharacterPhase, handlePlayerDisconnect, checkMidGameRemoval } from "../services/game.service.ts";
 import { verifyAccessToken } from "../../auth/accessToken.ts";
 import User from "../../db/models/User.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
@@ -260,7 +260,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           });
           deleteRoom(room.id);
         }
-      } else {
+      } else if (!checkMidGameRemoval(io, room)) {
         renewRoomInactivity(io, room);
         io.to(room.id).emit("roomUpdated", getPublicRoom(room));
       }
@@ -338,8 +338,10 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
       io.to(payload.targetId).emit("playerKicked", payload.targetId);
       io.to(room.id).emit("playerLeft", payload.targetId);
-      renewRoomInactivity(io, room);
-      io.to(room.id).emit("roomUpdated", getPublicRoom(room));
+      if (!checkMidGameRemoval(io, room)) {
+        renewRoomInactivity(io, room);
+        io.to(room.id).emit("roomUpdated", getPublicRoom(room));
+      }
 
       ack({ success: true });
     } catch (error) {

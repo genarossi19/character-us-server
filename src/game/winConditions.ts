@@ -1,4 +1,4 @@
-import type { RoomState, GameWinner, PlayerState } from "../types/game.ts";
+import type { RoomState, GameWinner, PlayerState } from "../types/Game.ts";
 import { getAlivePlayers } from "./stateMachine.ts";
 
 export interface WinCheckResult {
@@ -31,18 +31,6 @@ export function checkWinConditions(room: RoomState): WinCheckResult {
 
   if (aliveCount <= 1) {
     return { gameOver: true, winner: "impostor" };
-  }
-
-  if (room.currentRound >= room.settings.totalRounds) {
-    const totalImpostors = Array.from(room.players.values()).filter(
-      (p) => p.isImpostor
-    ).length;
-    const survivedImpostors = aliveImpostors.length;
-
-    if (survivedImpostors > totalImpostors / 2) {
-      return { gameOver: true, winner: "impostor" };
-    }
-    return { gameOver: true, winner: "innocent" };
   }
 
   return { gameOver: false };
