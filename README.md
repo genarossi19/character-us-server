@@ -54,7 +54,7 @@ Variables requeridas:
 | `ADMIN_EMAIL` | Cuenta administradora de AdminJS y rutas de escritura. |
 | `ADMIN_HASH` | Hash bcrypt del acceso a AdminJS. |
 | `PORT` | Puerto del servidor; por defecto `3000`. |
-| `CORS_ORIGIN` | Orígenes del frontend permitidos, separados por comas, para API y Socket.IO. |
+| `CORS_ORIGIN` | Orígenes adicionales del frontend permitidos, separados por comas, para API y Socket.IO. Incluye por defecto el frontend desplegado en `https://characterus-front.onrender.com`. |
 
 ## Autenticacion
 

@@ -1,6 +1,20 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+const trustedCorsOrigins = [
+  "http://localhost:5173",
+  "http://192.168.1.9:5173",
+  "https://characterus-front.onrender.com",
+];
+
+const corsOrigins = [...new Set([
+  ...trustedCorsOrigins,
+  ...(process.env.CORS_ORIGIN ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+])];
+
 const required = [
   "DB_CONNECTION_STRING",
   "JWT_SECRET",
@@ -26,9 +40,5 @@ export const env = {
   ADMIN_HASH: process.env.ADMIN_HASH!,
   PORT: parseInt(process.env.PORT || "3000", 10),
   NODE_ENV: process.env.NODE_ENV || "development",
-  CORS_ORIGINS: (process.env.CORS_ORIGIN ||
-    "http://localhost:5173,http://192.168.1.9:5173")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  CORS_ORIGINS: corsOrigins,
 } as const;
