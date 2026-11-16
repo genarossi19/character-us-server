@@ -1,5 +1,11 @@
 # Repository Instructions
 
+## Git Workflow
+
+- Use `developer` as the working branch for new development, fixes, and routine commits.
+- Reserve `main` for production releases. Do not publish routine work directly to `main`; promote verified changes from `developer` when a production release is explicitly requested.
+- Keep shared history intact: do not force-push or rewrite published commits.
+
 ## Sources Of Truth
 
 - The runtime entrypoint is `src/index.ts`; it wires Express, AdminJS, Socket.IO, and the HTTP server.

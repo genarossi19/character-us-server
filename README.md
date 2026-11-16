@@ -13,6 +13,10 @@ Backend de CharacterUs. Express expone la API HTTP, Socket.IO controla las salas
 
 El contrato para el frontend esta en [`frontend.md`](./frontend.md).
 
+## Flujo de ramas
+
+El desarrollo habitual y las correcciones se realizan en `developer`. `main` queda reservada para producción: recibe cambios verificados desde `developer` cuando se decide publicar una versión. Al comenzar una tarea, usar `git switch developer`; publicar desarrollo en `origin/developer` y promoverlo a `main` únicamente al preparar una salida a producción.
+
 ## Documentacion rapida
 
 - `GET /docs`: Swagger UI interactivo para la API HTTP.
