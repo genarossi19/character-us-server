@@ -40,7 +40,7 @@ test("gameEnded reveals all impostors only at the end and preserves public playe
     const ids = impostorCount === 1 ? ["host", "crew-a", "crew-b"] : ["host", "other-impostor", "crew-a", "crew-b", "crew-c"];
     const players = new Map(ids.map((id, index) => [id, {
       socketId: id, username: id, avatarUrl: `/${id}.webp`, userId: null, isGuest: true,
-      isHost: index === 0, isAlive: true, isOnline: true, hasVoted: false,
+      isHost: index === 0, isAlive: true, isOnline: true, hasVoted: false, isLobbyReady: true,
       isImpostor: index < impostorCount, isJoker: false, hasSubmittedWord: true, word: "pista",
     }]));
     const room = { id: "room", players, votes: new Map(), roundResults: [], chatMessages: [],
@@ -60,6 +60,7 @@ test("gameEnded reveals all impostors only at the end and preserves public playe
     assert.equal(result.players.some((player) => "isImpostor" in player || "characterId" in player), false);
     assert.equal(events.filter((event) => "impostorIds" in event.data).length, 1);
     assert.equal(room.gamePhase, "waiting");
+    assert.equal([...players.values()].every((player) => player.isLobbyReady === false), true, "all players must ready up for another game");
     assert.equal([...players.values()].some((player) => player.isImpostor), false);
     assert.equal(result.impostorIds.length, impostorCount, "final payload survives the lobby reset");
   }

@@ -5,6 +5,7 @@ import type {
   JoinRoomPayload,
   LeaveRoomPayload,
   StartGamePayload,
+  LobbyReadyPayload,
   KickPlayerPayload,
   ChangeAvatarPayload,
   RenewRoomInactivityPayload,
@@ -117,6 +118,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           settings.impostorCount >= settings.maxPlayers ||
           !Number.isInteger(settings.totalRounds) || settings.totalRounds < 1 ||
           !["classic", "anonymous", "special"].includes(settings.mode) ||
+          (settings.playMode !== undefined && !["online", "in_person"].includes(settings.playMode)) ||
           !["public", "private"].includes(settings.privacy) ||
           typeof settings.visibleVotes !== "boolean" || typeof settings.impostorsKnowEachOther !== "boolean" ||
           (settings.password !== undefined && typeof settings.password !== "string")) {
@@ -225,6 +227,9 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         isGuest: identity.isGuest,
         isAlive: true,
         isOnline: true,
+        isLobbyReady: false,
+        hasVoted: false,
+        isDebateReady: false,
       });
 
       io.to(room.id).emit("roomUpdated", publicRoom);
@@ -256,7 +261,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           deleteRoom(room.id);
         } else {
           io.to(room.id).emit("roomClosed", {
-            reason: "El host abandonó la sala",
+            reason: "El anfitrión abandonó la sala",
           });
           deleteRoom(room.id);
         }
@@ -272,6 +277,18 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
     }
   });
 
+  onAction(socket, "lobbyReady", (payload: LobbyReadyPayload, ack) => {
+    const room = getRoom(payload.roomId);
+    if (!room) return ack({ success: false, code: "ROOM_NOT_FOUND", message: "Sala no encontrada" });
+    const player = room.players.get(getPlayerId(socket));
+    if (!player || !player.isOnline) return ack({ success: false, code: "NOT_IN_ROOM", message: "No estás conectado a esta sala" });
+    if (room.status !== "waiting") return ack({ success: false, code: "ROOM_NOT_WAITING", message: "La partida ya comenzó" });
+    player.isLobbyReady = true;
+    renewRoomInactivity(io, room);
+    io.to(room.id).emit("roomUpdated", getPublicRoom(room));
+    ack({ success: true });
+  });
+
   onAction(socket, "startGame", (payload: StartGamePayload, ack) => {
     try {
       const room = getRoom(payload.roomId);
@@ -280,12 +297,12 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
 
       if (!isHost(room, getPlayerId(socket))) {
-        return ack({ success: false, message: "Solo el host puede iniciar el juego", code: "NOT_HOST" });
+        return ack({ success: false, message: "Solo el anfitrión puede iniciar el juego", code: "NOT_HOST" });
       }
 
       const canStart = canStartGame(room);
       if (!canStart.ok) {
-        return ack({ success: false, message: canStart.reason!, code: "MIN_PLAYERS" });
+        return ack({ success: false, message: canStart.reason!, code: canStart.code ?? "MIN_PLAYERS" });
       }
 
       room.status = "playing";
@@ -293,6 +310,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       clearRoomInactivity(room);
       room.currentRound = 1;
       room.roundResults = [];
+      room.completedTurns = [];
       room.chatMessages = [];
 
       const publicRoom = getPublicRoom(room);
@@ -318,7 +336,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
 
       if (!isHost(room, getPlayerId(socket))) {
-        return ack({ success: false, message: "Solo el host puede expulsar jugadores", code: "NOT_HOST" });
+        return ack({ success: false, message: "Solo el anfitrión puede expulsar jugadores", code: "NOT_HOST" });
       }
 
       if (payload.targetId === getPlayerId(socket)) {
@@ -406,7 +424,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
 
       if (!isHost(room, getPlayerId(socket))) {
-        return ack({ success: false, message: "Solo el host puede renovar la sala", code: "NOT_HOST" });
+        return ack({ success: false, message: "Solo el anfitrión puede renovar la sala", code: "NOT_HOST" });
       }
 
       if (room.status !== "waiting") {

@@ -1,5 +1,7 @@
 import type {
   RoomSettings,
+  RoomSettingsInput,
+  TurnCompleted,
   PlayerPublic,
   RoundResult,
   GameResult,
@@ -11,7 +13,7 @@ import type {
 
 export interface CreateRoomPayload {
   username: string;
-  settings: RoomSettings;
+  settings: RoomSettingsInput;
   avatarUrl?: string;
   token: string;
 }
@@ -33,6 +35,10 @@ export interface JoinRoomPayload {
   password?: string;
 }
 
+export interface LobbyReadyPayload {
+  roomId: string;
+}
+
 export interface StartGamePayload {
   roomId: string;
 }
@@ -49,6 +55,12 @@ export interface LeaveRoomPayload {
 export interface SubmitWordPayload {
   roomId: string;
   word: string;
+}
+
+export interface CompleteTurnPayload {
+  roomId: string;
+  round: number;
+  turnIndex: number;
 }
 
 export interface VotePlayerPayload {
@@ -92,9 +104,11 @@ export interface SocketToServerEvents {
   resumeRoom: (payload: ResumeRoomPayload, ack: Ack<RoomSnapshot>) => void;
   getGameState: (payload: { roomId: string }, ack: Ack<RoomSnapshot>) => void;
   leaveRoom: (payload: LeaveRoomPayload, ack: Ack) => void;
+  lobbyReady: (payload: LobbyReadyPayload, ack: Ack) => void;
   startGame: (payload: StartGamePayload, ack: Ack<{ room: RoomPublic }>) => void;
   kickPlayer: (payload: KickPlayerPayload, ack: Ack) => void;
   submitWord: (payload: SubmitWordPayload, ack: Ack) => void;
+  completeTurn: (payload: CompleteTurnPayload, ack: Ack) => void;
   votePlayer: (payload: VotePlayerPayload, ack: Ack) => void;
   sendChatMessage: (payload: SendChatMessagePayload, ack: Ack) => void;
   debateReady: (payload: DebateReadyPayload, ack: Ack) => void;
@@ -126,7 +140,10 @@ export interface ServerToClientEvents {
     username: string;
     turnIndex: number;
     total: number;
+    round: number;
+    turnExpiresAt: number | null;
   }) => void;
+  turnCompleted: (data: TurnCompleted) => void;
   wordHintRevealed: (data: { playerId: string; username: string; word: string; skipped: boolean }) => void;
   allWordsSubmitted: (data: { hints: WordHint[] }) => void;
   debateReadyUpdate: (data: { readyPlayers: string[]; total: number }) => void;

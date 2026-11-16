@@ -8,6 +8,7 @@ export type GamePhase =
   | "finished";
 
 export type GameMode = "classic" | "anonymous" | "special";
+export type PlayMode = "online" | "in_person";
 
 export type GameWinner = "innocent" | "impostor";
 
@@ -18,10 +19,14 @@ export interface RoomSettings {
   maxPlayers: number;
   privacy: "public" | "private";
   mode: GameMode;
+  playMode: PlayMode;
   impostorsKnowEachOther: boolean;
   visibleVotes: boolean;
   password?: string;
 }
+
+/** Los clientes anteriores pueden omitir playMode al crear la sala. */
+export type RoomSettingsInput = Omit<RoomSettings, "playMode"> & { playMode?: PlayMode };
 
 export interface PlayerState {
   resumeTokenHash?: string;
@@ -39,6 +44,7 @@ export interface PlayerState {
   isImpostor: boolean;
   isJoker: boolean;
   isDebateReady: boolean;
+  isLobbyReady: boolean;
   hasSubmittedWord: boolean;
   word: string | null;
   hasVoted: boolean;
@@ -60,7 +66,10 @@ export interface RoomState {
   gamePhase: GamePhase;
   currentRound: number;
   turnOrder: string[];
+  // Conserva el nombre público de quienes salen sin alterar los índices del turno.
+  turnUsernames: Map<string, string>;
   currentTurnIndex: number;
+  completedTurns: TurnCompleted[];
   phaseTimer: ReturnType<typeof setTimeout> | null;
   turnTimer: ReturnType<typeof setTimeout> | null;
   debateTimer: ReturnType<typeof setTimeout> | null;
@@ -70,6 +79,14 @@ export interface RoomState {
   votes: Map<string, string>;
   roundResults: RoundResult[];
   chatMessages: ChatMessage[];
+}
+
+export interface TurnCompleted {
+  playerId: string;
+  username: string;
+  round: number;
+  turnIndex: number;
+  skipped: boolean;
 }
 
 export interface WordHint {
@@ -117,6 +134,7 @@ export interface PlayerPublic {
   isOnline: boolean;
   hasVoted: boolean;
   isDebateReady: boolean;
+  isLobbyReady: boolean;
 }
 
 export interface CharacterAssignment {

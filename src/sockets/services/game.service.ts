@@ -117,7 +117,13 @@ export function startWordPhase(
   room.gamePhase = "word";
   room.phaseExpiresAt = null;
   room.turnOrder = buildTurnOrder(room);
+  room.turnUsernames = new Map(Array.from(room.players.values(), (p) => [p.socketId, p.username]));
   room.currentTurnIndex = 0;
+  room.completedTurns = [];
+  for (const player of room.players.values()) {
+    player.hasSubmittedWord = false;
+    player.word = null;
+  }
 
   io.to(room.id).emit("phaseChanged", { phase: "word" });
 
@@ -127,8 +133,12 @@ export function startWordPhase(
 function startTurnTimer(io: SocketIOServer, room: RoomState): void {
   clearTurnTimer(room);
   room.turnExpiresAt = Date.now() + GAME_CONFIG.WORD_TURN_TIMEOUT;
+  const round = room.currentRound;
+  const turnIndex = room.currentTurnIndex;
 
   room.turnTimer = setTimeout(() => {
+    if (getRoom(room.id) !== room || room.gamePhase !== "word" ||
+        room.currentRound !== round || room.currentTurnIndex !== turnIndex) return;
     handleWordTurnTimeout(io, room);
   }, GAME_CONFIG.WORD_TURN_TIMEOUT);
 }
@@ -149,6 +159,11 @@ function handleWordTurnTimeout(
   room.turnExpiresAt = null;
 
   if (room.gamePhase !== "word") return;
+
+  if (room.settings.playMode === "in_person") {
+    finishInPersonTurn(io, room, true);
+    return;
+  }
 
   const currentSocketId = room.turnOrder[room.currentTurnIndex];
   if (!currentSocketId) {
@@ -194,20 +209,82 @@ function emitCurrentTurn(io: SocketIOServer, room: RoomState): void {
   const currentSocketId = room.turnOrder[room.currentTurnIndex];
   const player = room.players.get(currentSocketId);
 
+  if (room.settings.playMode === "in_person" &&
+      (!player || !player.isAlive || !player.isOnline)) {
+    finishInPersonTurn(io, room, true);
+    return;
+  }
+
   if (!player || !player.isAlive || !player.isOnline || player.hasSubmittedWord) {
     room.currentTurnIndex++;
     emitCurrentTurn(io, room);
     return;
   }
 
+  startTurnTimer(io, room);
   io.to(room.id).emit("turnChanged", {
     playerId: player.socketId,
     username: player.username,
     turnIndex: room.currentTurnIndex,
     total: room.turnOrder.length,
+    round: room.currentRound,
+    turnExpiresAt: room.turnExpiresAt,
   });
+}
 
-  startTurnTimer(io, room);
+/** Sin awaits: registrar, emitir y avanzar es una única operación del proceso. */
+function finishInPersonTurn(io: SocketIOServer, room: RoomState, skipped: boolean): void {
+  if (room.gamePhase !== "word") return;
+  const turnIndex = room.currentTurnIndex;
+  const playerId = room.turnOrder[turnIndex];
+  if (!playerId || room.completedTurns.some((turn) =>
+    turn.round === room.currentRound && turn.turnIndex === turnIndex)) return;
+
+  const player = room.players.get(playerId);
+  const completed = {
+    playerId,
+    username: player?.username ?? room.turnUsernames.get(playerId) ?? playerId,
+    round: room.currentRound,
+    turnIndex,
+    skipped,
+  };
+  room.completedTurns.push(completed);
+  if (player) {
+    player.hasSubmittedWord = true;
+    player.word = null;
+  }
+  clearTurnTimer(room);
+  io.to(room.id).emit("turnCompleted", completed);
+  advanceWordTurn(io, room);
+}
+
+export function completeTurn(
+  io: SocketIOServer,
+  room: RoomState,
+  playerId: string,
+  round: number,
+  turnIndex: number,
+): { success: boolean; code?: string; error?: string } {
+  const fail = (code: string, error: string) => ({ success: false, code, error });
+  const player = room.players.get(playerId);
+  if (!player || !player.isOnline) return fail("NOT_IN_ROOM", "No estás conectado a esta sala");
+  if (room.settings.playMode !== "in_person") return fail("INVALID_MODE", "Esta acción requiere una partida presencial");
+  if (!Number.isSafeInteger(round) || round < 1 || !Number.isSafeInteger(turnIndex) || turnIndex < 0) {
+    return fail("INVALID_PAYLOAD", "La ronda y el índice de turno no son válidos");
+  }
+  // También reconoce un ack perdido después de pasar a debate, votar o ser eliminado.
+  if (room.completedTurns.some((turn) => turn.playerId === playerId &&
+      turn.round === round && turn.turnIndex === turnIndex && !turn.skipped)) {
+    return { success: true };
+  }
+  if (room.gamePhase !== "word") return fail("INVALID_PHASE", "No es la fase de palabras");
+  if (!player.isAlive) return fail("PLAYER_ELIMINATED", "Estás eliminado");
+  if (room.currentRound !== round || room.currentTurnIndex !== turnIndex) {
+    return fail("STALE_TURN", "La ronda o el turno ya no están vigentes");
+  }
+  if (room.turnOrder[turnIndex] !== playerId) return fail("NOT_YOUR_TURN", "No es tu turno");
+  finishInPersonTurn(io, room, false);
+  return { success: true };
 }
 
 export function submitWord(
@@ -216,6 +293,9 @@ export function submitWord(
   socketId: string,
   word: string
 ): { success: boolean; error?: string } {
+  if (room.settings.playMode === "in_person") {
+    return { success: false, error: "Las palabras son orales en modo presencial" };
+  }
   if (room.gamePhase !== "word") {
     return { success: false, error: "No es la fase de palabras" };
   }
@@ -282,7 +362,9 @@ function finishWordPhase(io: SocketIOServer, room: RoomState): void {
     skipped: p.word === "Sin palabra",
   }));
 
-  io.to(room.id).emit("allWordsSubmitted", { hints });
+  if (room.settings.playMode !== "in_person") {
+    io.to(room.id).emit("allWordsSubmitted", { hints });
+  }
 
   startDebatePhase(io, room);
 }
@@ -372,6 +454,9 @@ export function sendChatMessage(
   socketId: string,
   message: string
 ): { success: boolean; error?: string } {
+  if (room.settings.playMode === "in_person") {
+    return { success: false, error: "El chat no está disponible en modo presencial" };
+  }
   const player = room.players.get(socketId);
   if (!player) {
     return { success: false, error: "Jugador no encontrado" };
@@ -548,6 +633,7 @@ function finishVotingPhase(
       isOnline: result.eliminated.isOnline,
       hasVoted: result.eliminated.hasVoted,
       isDebateReady: result.eliminated.isDebateReady,
+      isLobbyReady: result.eliminated.isLobbyReady,
     };
 
     io.to(room.id).emit("playerEliminated", {
@@ -556,7 +642,7 @@ function finishVotingPhase(
     });
   }
 
-  const wordHints: WordHint[] = Array.from(room.players.values()).filter((p) => p.hasSubmittedWord).map((p) => ({
+  const wordHints: WordHint[] = room.settings.playMode === "in_person" ? [] : Array.from(room.players.values()).filter((p) => p.hasSubmittedWord).map((p) => ({
     playerId: p.socketId,
     username: p.username,
     word: p.word || "",
@@ -583,11 +669,12 @@ function finishVotingPhase(
           isOnline: result.eliminated.isOnline,
           hasVoted: result.eliminated.hasVoted,
           isDebateReady: result.eliminated.isDebateReady,
+          isLobbyReady: result.eliminated.isLobbyReady,
         }
       : null,
     wasImpostor: result.wasImpostor,
     wasJoker: result.wasJoker,
-    votes: votesRecord,
+    votes: room.settings.visibleVotes ? votesRecord : {},
     wordHints,
   };
 
@@ -767,6 +854,7 @@ function finishGame(
     isOnline: p.isOnline,
     hasVoted: p.hasVoted,
     isDebateReady: p.isDebateReady,
+    isLobbyReady: p.isLobbyReady,
   }));
 
   io.to(room.id).emit("gameEnded", {
@@ -781,13 +869,16 @@ function finishGame(
   room.gamePhase = "waiting";
   room.currentRound = 0;
   room.roundResults = [];
+  room.completedTurns = [];
   room.chatMessages = [];
 
   room.votes.clear();
   room.turnOrder = [];
+  room.turnUsernames = new Map();
   room.currentTurnIndex = 0;
 
   for (const player of room.players.values()) {
+    player.isLobbyReady = false;
     player.isAlive = true;
     player.isImpostor = false;
     player.isJoker = false;
@@ -812,8 +903,10 @@ export function handlePlayerDisconnect(
   if (!player) return;
 
   player.isOnline = false;
+  if (room.status === "waiting") player.isLobbyReady = false;
   player.disconnectedAt = Date.now();
   if (player.reconnectTimer) clearTimeout(player.reconnectTimer);
+  skipUnavailableInPersonTurn(io, room);
 
   io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 
@@ -856,7 +949,8 @@ export function handlePlayerDisconnect(
 export function handlePlayerReconnect(
   io: SocketIOServer,
   room: RoomState,
-  socketId: string
+  socketId: string,
+  broadcast = true,
 ): void {
   const player = room.players.get(socketId);
   if (!player) return;
@@ -869,7 +963,7 @@ export function handlePlayerReconnect(
   player.isOnline = true;
   player.disconnectedAt = null;
 
-  io.to(room.id).emit("roomUpdated", getPublicRoom(room));
+  if (broadcast) io.to(room.id).emit("roomUpdated", getPublicRoom(room));
 }
 
 /** Las desconexiones temporales cuentan hasta que vence su gracia. */
@@ -879,7 +973,10 @@ export function checkMidGameRemoval(
 ): boolean {
   if (room.status !== "playing") return false;
   const minimum = Math.max(GAME_CONFIG.MIN_PLAYERS, room.settings.impostorCount + 1);
-  if (room.players.size >= minimum) return false;
+  if (room.players.size >= minimum) {
+    skipUnavailableInPersonTurn(io, room);
+    return false;
+  }
 
   const reason = `No hay jugadores suficientes para continuar (mínimo ${minimum})`;
   io.to(room.id).emit("roomClosed", { reason });
@@ -887,11 +984,18 @@ export function checkMidGameRemoval(
   return true;
 }
 
+function skipUnavailableInPersonTurn(io: SocketIOServer, room: RoomState): void {
+  if (room.settings.playMode !== "in_person" || room.gamePhase !== "word") return;
+  const current = room.players.get(room.turnOrder[room.currentTurnIndex]);
+  if (!current || !current.isAlive || !current.isOnline) finishInPersonTurn(io, room, true);
+}
+
 function sendSystemMessage(
   io: SocketIOServer,
   room: RoomState,
   text: string
 ): void {
+  if (room.settings.playMode === "in_person") return;
   const msg: ChatMessage = {
     id: uuidv4(),
     senderId: "system",

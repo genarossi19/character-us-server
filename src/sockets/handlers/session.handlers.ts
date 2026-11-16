@@ -1,6 +1,6 @@
 import type { Server, Socket } from "socket.io";
 import { onAction } from "./action.ts";
-import { getRoom, getRoomBySocket } from "../services/room.service.ts";
+import { getRoom, getRoomBySocket, getPublicRoom } from "../services/room.service.ts";
 import { getGameSnapshot, getPlayerId, hashResumeToken } from "../services/session.service.ts";
 import { handlePlayerReconnect } from "../services/game.service.ts";
 import type { Ack, ResumeRoomPayload, RoomSnapshot } from "../../types/socket.ts";
@@ -46,8 +46,9 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       delete socket.data.playerId;
       return callback({ success: false, code: "INVALID_SESSION", message: "La sesión de sala venció" });
     }
-    handlePlayerReconnect(io, room, player.socketId);
+    handlePlayerReconnect(io, room, player.socketId, false);
     callback({ success: true, data: getGameSnapshot(room, player.socketId) });
+    io.to(room.id).emit("roomUpdated", getPublicRoom(room));
     } catch {
       callback({ success: false, code: "INTERNAL_ERROR", message: "No pudimos recuperar la sesión. Intenta nuevamente." });
     }

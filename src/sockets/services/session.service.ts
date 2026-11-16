@@ -37,7 +37,8 @@ export function getGameSnapshot(room: RoomState, playerId: string) {
       ? room.turnOrder[room.currentTurnIndex] ?? null : null,
     turnIndex: room.currentTurnIndex,
     totalTurns: room.turnOrder.length,
-    wordHints: Array.from(room.players.values())
+    completedTurns: (room.completedTurns ?? []).map((turn) => ({ ...turn })),
+    wordHints: room.settings.playMode === "in_person" ? [] : Array.from(room.players.values())
       .filter((p) => p.hasSubmittedWord)
       .map((p) => ({ playerId: p.socketId, username: p.username,
         word: p.word || "", revealed: true, skipped: p.word === "Sin palabra" })),
@@ -55,7 +56,7 @@ export function getGameSnapshot(room: RoomState, playerId: string) {
     votes: room.settings.visibleVotes ? Object.fromEntries(room.votes) : {},
     voterIds: Array.from(room.votes.keys()),
     readyPlayerIds: Array.from(room.players.values()).filter((p) => p.isDebateReady).map((p) => p.socketId),
-    chatMessages: room.chatMessages.filter((message) => message.type !== "ghost" || !player.isAlive),
+    chatMessages: room.settings.playMode === "in_person" ? [] : room.chatMessages.filter((message) => message.type !== "ghost" || !player.isAlive),
     roundResults: room.roundResults,
   };
 }

@@ -1,5 +1,14 @@
 # Frontend Contract — CharacterUs Server
 
+## Preparación del lobby
+
+`lobbyReady: { roomId }` confirma preparación del jugador estable de la conexión. Requiere pertenecer a esa sala, estar conectado y que la sala siga en `waiting`; también admite invitados. Responde `{ success: true }` y publica `roomUpdated` con `PlayerPublic.isLobbyReady`. Repetir la confirmación es idempotente. Errores: `ROOM_NOT_FOUND`, `NOT_IN_ROOM`, `ROOM_NOT_WAITING` y validación `INVALID_PAYLOAD`.
+
+`startGame` conserva la autorización exclusiva del anfitrión y el mínimo `max(MIN_PLAYERS, impostorCount + 1)`. También exige que todos los miembros, incluido el anfitrión, estén conectados y tengan `isLobbyReady: true`; de lo contrario devuelve `NOT_ALL_READY`. Crear/unirse inicializa el campo en `false`. Terminar una partida lo limpia para todos; desconectarse mientras se espera lo limpia para ese jugador y reconectar requiere otra confirmación. `getPublicRoom` y el snapshot de recuperación incluyen el campo sin exponer roles ni credenciales. La preparación del debate sigue siendo independiente.
+
+Pruebas aisladas sin acceso a PostgreSQL: `node --test src/sockets/tests/lobbyReady.test.mjs src/sockets/tests/gameReveal.test.mjs`.
+
+
 > Documento de referencia para el frontend. Todo lo que necesita saber para conectarse al backend: endpoints HTTP, eventos Socket.IO, tipos de datos, y flujo del juego.
 
 ---
@@ -316,6 +325,7 @@ type Ack<T> = (response: AckSuccess<T> | AckError) => void;
 ```ts
 type GamePhase = "waiting" | "character" | "word" | "debate" | "voting" | "results" | "finished";
 type GameMode = "classic" | "anonymous" | "special";
+type PlayMode = "online" | "in_person";
 
 interface RoomSettings {
   category: string;          // UUID de categoría (obtener de GET /api/category)
@@ -324,6 +334,7 @@ interface RoomSettings {
   maxPlayers: number;        // 3-10, default: 10
   privacy: "public" | "private";
   mode: GameMode;
+  playMode: PlayMode;        // se puede omitir al crear: default "online"; independiente de mode
   impostorsKnowEachOther: boolean;
   visibleVotes: boolean;
   password?: string;         // requerido si privacy === "private"
@@ -371,6 +382,14 @@ interface WordHint {
   skipped: boolean;
 }
 
+interface TurnCompleted {
+  playerId: string;
+  username: string;
+  round: number;
+  turnIndex: number;         // base cero, mismo índice que turnChanged
+  skipped: boolean;
+}
+
 interface CharacterAssignment {
   character: {
     id: string;
@@ -387,7 +406,7 @@ interface RoundResult {
   eliminatedPlayer: PlayerPublic | null;
   wasImpostor: boolean;
   wasJoker: boolean;
-  votes: Record<string, string>;  // voterId → targetId
+  votes: Record<string, string>;  // voterId → targetId; {} si visibleVotes es false
   wordHints: WordHint[];
 }
 
@@ -481,7 +500,7 @@ Solo el host puede expulsar.
 
 #### `submitWord`
 
-Enviar palabra en la fase `word`. Solo se puede cuando es tu turno.
+Enviar palabra en la fase `word`. Solo se puede cuando es tu turno y `playMode` es `online`. En presencial responde `INVALID_MODE`.
 
 **Payload:**
 ```ts
@@ -492,6 +511,26 @@ Enviar palabra en la fase `word`. Solo se puede cuando es tu turno.
 ```
 
 **Errores:** `INVALID_PHASE`, `INVALID_TURN`, `ALREADY_SUBMITTED`, `PLAYER_NOT_ALIVE`
+
+---
+
+#### `completeTurn`
+
+Confirmar que terminó la intervención oral en una sala `in_person`. El servidor toma la identidad estable de la conexión; no recibe un `playerId` del cliente.
+
+**Payload:** `{ roomId: string; round: number; turnIndex: number }`
+
+**Ack:** `{ success: true }` o `{ success: false, code, message }`. La misma confirmación aceptada se puede reintentar (incluso tras pasar a debate/votación) sin otro avance. Una solicitud de un turno vencido/saltado no cuenta como confirmación aceptada. No adelantar el cliente por el ack: esperar `turnCompleted` y `turnChanged`/`phaseChanged`.
+
+**Errores:** `ROOM_NOT_FOUND`, `NOT_IN_ROOM`, `INVALID_MODE`, `INVALID_PHASE`, `PLAYER_ELIMINATED`, `NOT_YOUR_TURN`, `STALE_TURN`, `INVALID_PAYLOAD`.
+
+#### `resumeRoom` / `getGameState`
+
+`resumeRoom: { roomId, resumeToken }` recupera la identidad estable usando el token recibido en `createRoom`/`joinRoom` (`data.session`). `getGameState: { roomId }` requiere el transporte vigente de esa identidad. Ambos responden `{ success: true, data: RoomSnapshot }`.
+
+El snapshot conserva `room` (con `settings.playMode`, `currentRound` y jugadores públicos), `playerId`, `serverTime`, `currentTurnPlayerId`, `turnIndex`, `totalTurns`, `turnExpiresAt`, `phaseExpiresAt`, `characterAssignment` privado, `hasSubmittedWord`, `completedTurns: TurnCompleted[]`, `isDebateReady`, `readyPlayerIds`, `hasVoted`, `votedFor` propio, `votes` según privacidad, `voterIds`, `wordHints`, `chatMessages` y `roundResults`.
+
+En presencial, `hasSubmittedWord` significa que el turno propio ya terminó (también si fue saltado). `wordHints` y `chatMessages` son `[]`; las pistas de los resultados también están vacías. `completedTurns` se conserva en debate/votación/resultados y se reinicia al comenzar la siguiente fase `word`. El snapshot se entrega antes de `roomUpdated` de la reconexión; los temporizadores continúan y no se renuevan al recuperar. Aplicar el snapshot antes de procesar las actualizaciones posteriores.
 
 ---
 
@@ -513,7 +552,7 @@ Votar en la fase `voting`. Un voto por ronda, no se puede cambiar.
 
 #### `sendChatMessage`
 
-Enviar mensaje de chat en fase `debate` o `voting`. Los mensajes de jugadores eliminados (ghost) solo son visibles para otros eliminados.
+Enviar mensaje de chat en fase `debate` o `voting`. Los mensajes de jugadores eliminados (ghost) solo son visibles para otros eliminados. En presencial se rechaza con `INVALID_MODE`, también para fantasmas.
 
 **Payload:**
 ```ts
@@ -661,14 +700,22 @@ Indica de quién es el turno en la fase `word`.
   username: string;
   turnIndex: number;   // 0-based
   total: number;       // total de jugadores en turno
+  round: number;
+  turnExpiresAt: number | null; // deadline del servidor en milisegundos Unix
 } => void
 ```
 
 ---
 
+#### `turnCompleted`
+
+Solo presencial: `(turn: TurnCompleted) => void`. Confirma públicamente una intervención oral, sin palabra ni rol. Después llega `turnChanged` para el siguiente turno o `phaseChanged: { phase: "debate" }`. Al vencer 60 segundos o quedar indisponible el jugador, se emite con `skipped: true`. El reintento de una confirmación aceptada no repite estos eventos.
+
+---
+
 #### `wordHintRevealed`
 
-Se emite cuando un jugador envía su palabra (o expira el tiempo). **Incluye la palabra.**
+Solo en línea. Se emite cuando un jugador envía su palabra (o expira el tiempo). **Incluye la palabra.**
 
 ```ts
 {
@@ -683,7 +730,7 @@ Se emite cuando un jugador envía su palabra (o expira el tiempo). **Incluye la 
 
 #### `allWordsSubmitted`
 
-Todas las palabras fueron reveladas. Incluye el array completo.
+Solo en línea. Todas las palabras fueron reveladas. Incluye el array completo.
 
 ```ts
 { hints: WordHint[] } => void
@@ -756,7 +803,7 @@ El juego terminó. Se incluyen todos los resultados y el ganador.
 
 #### `chatMessage`
 
-Mensaje de chat (puede ser de jugador, ghost, o sistema).
+Mensaje de chat (puede ser de jugador, ghost, o sistema). Nunca se emite en presencial; debate y votación se siguen mediante los eventos de estado.
 
 ```ts
 (message: ChatMessage) => void

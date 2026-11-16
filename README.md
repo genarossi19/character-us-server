@@ -1,5 +1,14 @@
 # CharacterUs Server
 
+## Preparación del lobby
+
+`lobbyReady: { roomId }` confirma preparación del jugador estable de la conexión. Requiere pertenecer a esa sala, estar conectado y que la sala siga en `waiting`; también admite invitados. Responde `{ success: true }` y publica `roomUpdated` con `PlayerPublic.isLobbyReady`. Repetir la confirmación es idempotente. Errores: `ROOM_NOT_FOUND`, `NOT_IN_ROOM`, `ROOM_NOT_WAITING` y validación `INVALID_PAYLOAD`.
+
+`startGame` conserva la autorización exclusiva del anfitrión y el mínimo `max(MIN_PLAYERS, impostorCount + 1)`. También exige que todos los miembros, incluido el anfitrión, estén conectados y tengan `isLobbyReady: true`; de lo contrario devuelve `NOT_ALL_READY`. Crear/unirse inicializa el campo en `false`. Terminar una partida lo limpia para todos; desconectarse mientras se espera lo limpia para ese jugador y reconectar requiere otra confirmación. `getPublicRoom` y el snapshot de recuperación incluyen el campo sin exponer roles ni credenciales. La preparación del debate sigue siendo independiente.
+
+Pruebas aisladas sin acceso a PostgreSQL: `node --test src/sockets/tests/lobbyReady.test.mjs src/sockets/tests/gameReveal.test.mjs`.
+
+
 Backend de CharacterUs. Express expone la API HTTP, Socket.IO controla las salas y la partida en tiempo real, y PostgreSQL/Supabase conserva usuarios, catalogo, historial y estadisticas.
 
 El contrato para el frontend esta en [`frontend.md`](./frontend.md).
@@ -75,9 +84,17 @@ Sin ganador, `results` vuelve a `word` con el mismo personaje e impostores y sin
 
 - Cada turno de palabra dura hasta 60 segundos.
 - Debate y votacion duran 40 segundos.
-- El chat esta habilitado durante debate y votacion.
+- En `settings.playMode: "online"` (predeterminado), el chat está habilitado durante debate y votación.
 - El valor de ganador emitido y persistido es `innocent` o `impostor`.
 - `gameEnded` incluye `impostorIds` para revelar nombres y avatares al finalizar; los DTOs públicos de sala siguen sin roles.
+
+El modo presencial se solicita con `settings.playMode: "in_person"`, independiente de `mode`. Las palabras y el debate son orales: `submitWord` y `sendChatMessage` se rechazan con `INVALID_MODE`, incluidos los mensajes de fantasmas. El servidor tampoco genera mensajes de chat para estas salas.
+
+En fase `word`, el jugador en turno envía `completeTurn: { roomId, round, turnIndex }`. El servidor publica `turnCompleted: { playerId, username, round, turnIndex, skipped }` y después `turnChanged` o `phaseChanged` hacia debate. Reintentar una confirmación aceptada devuelve éxito sin repetir el evento ni avanzar otra vez. Vencer los 60 segundos, desconectarse o salir completa el turno con `skipped: true`. `turnChanged` incluye `round` y `turnExpiresAt` (timestamp del servidor).
+
+`resumeRoom` y `getGameState` incluyen `completedTurns`, turno, ronda, deadlines y preparación. En presencial, `hasSubmittedWord` indica que el turno propio terminó; `wordHints` y `chatMessages` están vacíos. Los completados se conservan hasta la siguiente fase `word`. Los votos ocultos tampoco exponen objetivos en `roundResults` ni en su historial.
+
+Pruebas del juego sin acceso a PostgreSQL: `DB_CONNECTION_STRING=postgres://test:test@127.0.0.1:1/test node --test src/sockets/tests/*.test.ts src/sockets/tests/*.test.mjs`. La integración usa clientes WebSocket reales y requiere abrir puertos locales.
 
 ## Comandos
 

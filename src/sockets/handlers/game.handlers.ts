@@ -2,6 +2,7 @@ import type { Server as SocketIOServer, Socket } from "socket.io";
 import { onAction } from "./action.ts";
 import type {
   SubmitWordPayload,
+  CompleteTurnPayload,
   VotePlayerPayload,
   SendChatMessagePayload,
   DebateReadyPayload,
@@ -9,9 +10,22 @@ import type {
 import { getRoom } from "../services/room.service.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
 import { getPlayerId } from "../services/session.service.ts";
-import { submitWord, castVote, sendChatMessage, setDebateReady } from "../services/game.service.ts";
+import { submitWord, completeTurn, castVote, sendChatMessage, setDebateReady } from "../services/game.service.ts";
 
 export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
+  onAction(socket, "completeTurn", (payload: CompleteTurnPayload, ack) => {
+    const room = getRoom(payload.roomId);
+    if (!room) return ack({ success: false, code: "ROOM_NOT_FOUND", message: "Sala no encontrada" });
+    const playerId = getPlayerId(socket);
+    const player = room.players.get(playerId);
+    if (!socket.connected || !player?.isOnline || player.connectionSocketId !== socket.id) {
+      return ack({ success: false, code: "NOT_IN_ROOM", message: "No estás conectado a esta sala" });
+    }
+    const result = completeTurn(io, room, playerId, payload.round, payload.turnIndex);
+    if (!result.success) return ack({ success: false, code: result.code!, message: result.error! });
+    ack({ success: true });
+  });
+
   onAction(socket, "submitWord", (payload: SubmitWordPayload, callback) => {
     // Algunos clientes emiten sin ack. La ausencia del callback nunca debe
     // interrumpir el proceso después de guardar y difundir una palabra.
@@ -47,6 +61,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
       if (!result.success) {
         const codeMap: Record<string, string> = {
+          "Las palabras son orales en modo presencial": "INVALID_MODE",
           "No es la fase de palabras": "INVALID_PHASE",
           "Jugador no encontrado": "PLAYER_NOT_FOUND",
           "No puedes decir una palabra porque estás eliminado": "PLAYER_NOT_ALIVE",
@@ -127,6 +142,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
       if (!result.success) {
         const codeMap: Record<string, string> = {
+          "El chat no está disponible en modo presencial": "INVALID_MODE",
           "Jugador no encontrado": "PLAYER_NOT_FOUND",
           "El mensaje no puede estar vacío": "INVALID_MESSAGE",
           "Enviando mensajes muy rápido": "FLOOD_LIMIT",

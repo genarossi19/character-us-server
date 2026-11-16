@@ -1,5 +1,14 @@
 # Arquitectura Actual
 
+## Preparación del lobby
+
+`lobbyReady: { roomId }` confirma preparación del jugador estable de la conexión. Requiere pertenecer a esa sala, estar conectado y que la sala siga en `waiting`; también admite invitados. Responde `{ success: true }` y publica `roomUpdated` con `PlayerPublic.isLobbyReady`. Repetir la confirmación es idempotente. Errores: `ROOM_NOT_FOUND`, `NOT_IN_ROOM`, `ROOM_NOT_WAITING` y validación `INVALID_PAYLOAD`.
+
+`startGame` conserva la autorización exclusiva del anfitrión y el mínimo `max(MIN_PLAYERS, impostorCount + 1)`. También exige que todos los miembros, incluido el anfitrión, estén conectados y tengan `isLobbyReady: true`; de lo contrario devuelve `NOT_ALL_READY`. Crear/unirse inicializa el campo en `false`. Terminar una partida lo limpia para todos; desconectarse mientras se espera lo limpia para ese jugador y reconectar requiere otra confirmación. `getPublicRoom` y el snapshot de recuperación incluyen el campo sin exponer roles ni credenciales. La preparación del debate sigue siendo independiente.
+
+Pruebas aisladas sin acceso a PostgreSQL: `node --test src/sockets/tests/lobbyReady.test.mjs src/sockets/tests/gameReveal.test.mjs`.
+
+
 ## Limites del sistema
 
 | Area | Implementacion activa |
@@ -74,6 +83,14 @@ waiting -> character -> word -> debate -> voting -> results
 El ganador interno, emitido al cliente y persistido es `innocent` o `impostor`.
 
 ## Contratos publicos
+
+`RoomSettings.playMode` distingue `online` (por defecto al crear sin ese campo) de `in_person`, independientemente de `mode`. Se valida antes de crear y se conserva en todos los DTOs de sala y snapshots. No hay acción para cambiarlo durante la partida.
+
+En presencial, `completeTurn` recibe sala, ronda e índice (base cero), y usa la identidad estable del transporte vigente. Una operación síncrona registra `TurnCompleted`, emite `turnCompleted` y avanza al siguiente turno o a debate. `completedTurns` permite reconocer reintentos aceptados sin repetir emisiones; se limpia al comenzar otra fase `word`. Timeouts y jugadores no disponibles pasan por esa misma operación con `skipped: true`. El orden y sus índices se conservan aunque un jugador abandone; `turnUsernames` retiene solo sus nombres públicos hasta la siguiente ronda.
+
+Los turnos conservan 60 segundos. `turnChanged` comunica `round` y `turnExpiresAt`; la recuperación conserva ambos deadlines, preparación, votos permitidos y completados. `resumeRoom` entrega el snapshot antes de emitir la actualización de reconexión. No se aceptan palabras escritas ni chat en presencial, tampoco se emiten mensajes de sistema/ghost. Los snapshots y resultados tienen pistas vacías; los votos ocultos se omiten también de resultados históricos. Debate, votación, ganadores y asignaciones privadas mantienen el mismo flujo.
+
+Cobertura presencial y regresiones: `DB_CONNECTION_STRING=postgres://test:test@127.0.0.1:1/test node --test src/sockets/tests/*.test.ts src/sockets/tests/*.test.mjs` (sin consultas a PostgreSQL; la integración abre puertos locales).
 
 `RoomPublic` y `PlayerPublic` no incluyen `characterId`, `isImpostor` ni `isJoker`. Las asignaciones de personaje se emiten individualmente con `characterAssigned` para preservar el secreto del rol.
 

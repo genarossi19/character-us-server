@@ -41,7 +41,7 @@ export function buildTurnOrder(room: RoomState): string[] {
   return shuffleArray(alive.map((p) => p.socketId));
 }
 
-export function canStartGame(room: RoomState): { ok: boolean; reason?: string } {
+export function canStartGame(room: RoomState): { ok: boolean; reason?: string; code?: string } {
   const playerCount = Array.from(room.players.values()).filter((p) => p.isOnline).length;
   if (playerCount < Math.max(GAME_CONFIG.MIN_PLAYERS, room.settings.impostorCount + 1)) {
     return {
@@ -51,6 +51,9 @@ export function canStartGame(room: RoomState): { ok: boolean; reason?: string } 
   }
   if (room.status !== "waiting") {
     return { ok: false, reason: "La sala ya está en juego" };
+  }
+  if (Array.from(room.players.values()).some((player) => !player.isOnline || !player.isLobbyReady)) {
+    return { ok: false, code: "NOT_ALL_READY", reason: "Todos los jugadores deben estar conectados y listos" };
   }
   return { ok: true };
 }
@@ -79,6 +82,8 @@ export function prepareRoomForNextRound(room: RoomState): void {
   room.votes.clear();
   room.chatMessages = [];
   room.turnOrder = [];
+  room.turnUsernames = new Map();
+  room.completedTurns = [];
   room.currentTurnIndex = 0;
   for (const player of room.players.values()) {
     resetPlayerForNewRound(player);

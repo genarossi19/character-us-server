@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import type { Server as SocketIOServer } from "socket.io";
-import type { RoomState, PlayerState, RoomSettings } from "../../types/Game.ts";
+import type { RoomState, PlayerState, RoomSettingsInput } from "../../types/Game.ts";
 import { GAME_CONFIG } from "../../config/game.ts";
 
 const rooms = new Map<string, RoomState>();
@@ -75,12 +75,15 @@ export function generateGamePin(): number {
 export function createRoom(
   hostSocketId: string,
   username: string,
-  settings: RoomSettings,
+  settings: RoomSettingsInput,
   avatarUrl: string,
   userId: string | null,
   isGuest: boolean,
   roomName: string
 ): RoomState {
+  if (settings.playMode !== undefined && !["online", "in_person"].includes(settings.playMode)) {
+    throw new Error("Tipo de partida inválido");
+  }
   const roomId = uuidv4();
   const code = generateGamePin();
 
@@ -97,6 +100,7 @@ export function createRoom(
     isImpostor: false,
     isJoker: false,
     isDebateReady: false,
+    isLobbyReady: false,
     hasSubmittedWord: false,
     word: null,
     hasVoted: false,
@@ -109,13 +113,15 @@ export function createRoom(
     code,
     hostId: hostSocketId,
     name: roomName,
-    settings,
+    settings: { ...settings, playMode: settings.playMode ?? "online" },
     players: new Map([[hostSocketId, host]]),
     status: "waiting",
     gamePhase: "waiting",
     currentRound: 0,
     turnOrder: [],
+    turnUsernames: new Map(),
     currentTurnIndex: 0,
+    completedTurns: [],
     phaseTimer: null,
     turnTimer: null,
     debateTimer: null,
@@ -184,6 +190,7 @@ export function joinRoom(
     isImpostor: false,
     isJoker: false,
     isDebateReady: false,
+    isLobbyReady: false,
     hasSubmittedWord: false,
     word: null,
     hasVoted: false,
@@ -328,6 +335,7 @@ export function getPublicRoom(room: RoomState) {
       isOnline: p.isOnline,
       hasVoted: p.hasVoted,
       isDebateReady: p.isDebateReady,
+      isLobbyReady: p.isLobbyReady,
     })),
     status: room.status,
     gamePhase: room.gamePhase,
